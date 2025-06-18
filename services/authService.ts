@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 
 // Note: These would be your actual Supabase credentials
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://rvolhrslnmnwbrexlviq.supabase.co';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2b2xocnNsbm1ud2JyZXhsdmlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAyMjc2MjEsImV4cCI6MjA2NTgwMzYyMX0.NocZMKN4AD09W7h6opSR0pF1G_CeCm3bpSScmZqDmOY';
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -63,6 +63,11 @@ class AuthService {
 
   async getCurrentUser() {
     try {
+      // If using placeholder credentials, return null (not authenticated)
+      if (supabaseUrl === 'https://placeholder.supabase.co') {
+        return null;
+      }
+      
       const { data: { user }, error } = await supabase.auth.getUser();
       if (error) throw error;
       return user;

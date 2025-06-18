@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { View, Text } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
@@ -27,7 +28,11 @@ export default function RootLayout() {
 
   // Show loading while checking auth state
   if (isAuthenticated === null) {
-    return null;
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <Text style={{ fontSize: 18, color: '#333' }}>Loading SuperNote...</Text>
+      </View>
+    );
   }
 
   return (

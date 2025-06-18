@@ -4,7 +4,11 @@
     "strict": true,
     "paths": {
       "@/*": ["./*"]
-    }
+    },
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "moduleResolution": "node"
   },
   "include": [
     "**/*.ts",
