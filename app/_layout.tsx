@@ -8,12 +8,28 @@ import { authService } from '@/services/authService';
 export default function RootLayout() {
   useFrameworkReady();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [isSupabaseConfigured, setIsSupabaseConfigured] = useState(true);
 
   useEffect(() => {
+    // Check if Supabase is configured
+    const configured = authService.isConfigured();
+    setIsSupabaseConfigured(configured);
+
+    if (!configured) {
+      // If Supabase is not configured, set as not authenticated
+      setIsAuthenticated(false);
+      return;
+    }
+
     // Check initial auth state
     const checkAuthState = async () => {
-      const user = await authService.getCurrentUser();
-      setIsAuthenticated(!!user);
+      try {
+        const user = await authService.getCurrentUser();
+        setIsAuthenticated(!!user);
+      } catch (error) {
+        console.warn('Error checking auth state:', error);
+        setIsAuthenticated(false);
+      }
     };
 
     checkAuthState();
@@ -31,6 +47,23 @@ export default function RootLayout() {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
         <Text style={{ fontSize: 18, color: '#333' }}>Loading SuperNote...</Text>
+      </View>
+    );
+  }
+
+  // Show configuration message if Supabase is not set up
+  if (!isSupabaseConfigured) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', padding: 20 }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#333', marginBottom: 10 }}>
+          Supabase Configuration Required
+        </Text>
+        <Text style={{ fontSize: 16, color: '#666', textAlign: 'center', lineHeight: 24 }}>
+          Please update your .env file with your Supabase project URL and anonymous key to continue.
+        </Text>
+        <Text style={{ fontSize: 14, color: '#999', textAlign: 'center', marginTop: 10 }}>
+          You can find these values in your Supabase project settings under 'API'.
+        </Text>
       </View>
     );
   }

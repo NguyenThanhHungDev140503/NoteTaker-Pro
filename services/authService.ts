@@ -4,9 +4,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import 'react-native-url-polyfill/auto';
 
-// Note: These would be your actual Supabase credentials
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://rvolhrslnmnwbrexlviq.supabase.co';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2b2xocnNsbm1ud2JyZXhsdmlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAyMjc2MjEsImV4cCI6MjA2NTgwMzYyMX0.NocZMKN4AD09W7h6opSR0pF1G_CeCm3bpSScmZqDmOY';
+// Get environment variables
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+// Check if we have valid Supabase credentials
+const hasValidCredentials = supabaseUrl && 
+  supabaseAnonKey && 
+  supabaseUrl !== 'https://your-project.supabase.co' && 
+  supabaseAnonKey !== 'your-anon-key' &&
+  supabaseUrl !== 'https://placeholder.supabase.co';
 
 // Platform-specific storage adapter
 const createStorageAdapter = () => {
@@ -65,17 +72,21 @@ const createStorageAdapter = () => {
   }
 };
 
-// Create Supabase client with platform-specific storage
-const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+// Create Supabase client only if we have valid credentials
+const supabase = hasValidCredentials ? createClient(supabaseUrl!, supabaseAnonKey!, {
   auth: {
     storage: createStorageAdapter(),
     autoRefreshToken: true,
     persistSession: true,
   },
-});
+}) : null;
 
 class AuthService {
   async signUp(email: string, password: string) {
+    if (!hasValidCredentials || !supabase) {
+      throw new Error('Supabase is not configured. Please check your environment variables.');
+    }
+
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -94,6 +105,10 @@ class AuthService {
   }
 
   async signIn(email: string, password: string) {
+    if (!hasValidCredentials || !supabase) {
+      throw new Error('Supabase is not configured. Please check your environment variables.');
+    }
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -109,6 +124,11 @@ class AuthService {
   }
 
   async signOut() {
+    if (!hasValidCredentials || !supabase) {
+      // If no valid credentials, just return as user is not authenticated anyway
+      return;
+    }
+
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
@@ -119,23 +139,43 @@ class AuthService {
   }
 
   async getCurrentUser() {
+    // If no valid credentials, return null (not authenticated)
+    if (!hasValidCredentials || !supabase) {
+      return null;
+    }
+
     try {
-      // If using placeholder credentials, return null (not authenticated)
-      if (supabaseUrl === 'https://placeholder.supabase.co') {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error) {
+        // Log the error but don't throw it, just return null for unauthenticated state
+        console.warn('Unable to get current user:', error.message);
         return null;
       }
-      
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error) throw error;
       return user;
     } catch (error) {
-      console.error('Get user error:', error);
+      console.warn('Get user error:', error);
       return null;
     }
   }
 
   onAuthStateChange(callback: (event: string, session: any) => void) {
+    if (!hasValidCredentials || !supabase) {
+      // Return a dummy subscription that can be safely unsubscribed
+      return {
+        data: {
+          subscription: {
+            unsubscribe: () => {}
+          }
+        }
+      };
+    }
+
     return supabase.auth.onAuthStateChange(callback);
+  }
+
+  // Helper method to check if Supabase is properly configured
+  isConfigured(): boolean {
+    return hasValidCredentials;
   }
 }
 
