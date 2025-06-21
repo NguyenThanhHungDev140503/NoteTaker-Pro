@@ -35,8 +35,18 @@ import { MediaPicker } from '@/components/MediaPicker';
 import { AudioRecorder } from '@/components/AudioRecorder';
 import { noteService } from '@/services/noteService';
 import { Note } from '@/types/note';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Animated, { 
+  useSharedValue, 
+  useAnimatedStyle,
+  withSpring,
+  runOnJS,
+  withTiming,
+  interpolate,
+} from 'react-native-reanimated';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const SWIPE_THRESHOLD = 50;
 
 export default function CreateScreen() {
   const [title, setTitle] = useState('');
@@ -50,9 +60,54 @@ export default function CreateScreen() {
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
   const [imageLoadingStates, setImageLoadingStates] = useState<{ [key: number]: boolean }>({});
+  const [isGestureActive, setIsGestureActive] = useState(false);
+
+  // Animated values for gesture
+  const translateX = useSharedValue(0);
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
 
   const titleInputRef = useRef<TextInput>(null);
   const contentInputRef = useRef<TextInput>(null);
+
+  // Gesture handlers
+  const panGesture = Gesture.Pan()
+    .onStart(() => {
+      runOnJS(setIsGestureActive)(true);
+    })
+    .onUpdate((event) => {
+      // Only handle horizontal swipes
+      if (Math.abs(event.translationY) > Math.abs(event.translationX)) {
+        return;
+      }
+      
+      translateX.value = event.translationX;
+      
+      // Add subtle scale effect during swipe
+      const progress = Math.abs(event.translationX) / screenWidth;
+      scale.value = interpolate(progress, [0, 0.5], [1, 0.95], 'clamp');
+      opacity.value = interpolate(progress, [0, 0.3], [1, 0.8], 'clamp');
+    })
+    .onEnd((event) => {
+      const shouldNavigate = Math.abs(event.translationX) > SWIPE_THRESHOLD;
+      
+      if (shouldNavigate && images.length > 1) {
+        if (event.translationX > 0) {
+          // Swipe right - go to previous image
+          runOnJS(goToPreviousImageWithAnimation)();
+        } else {
+          // Swipe left - go to next image
+          runOnJS(goToNextImageWithAnimation)();
+        }
+      } else {
+        // Return to original position
+        translateX.value = withSpring(0);
+        scale.value = withSpring(1);
+        opacity.value = withSpring(1);
+      }
+      
+      runOnJS(setIsGestureActive)(false);
+    });
 
   const handleSave = async () => {
     if (!title.trim() && !content.trim()) {
@@ -134,6 +189,11 @@ export default function CreateScreen() {
     setSelectedImageIndex(index);
     setIsImageViewerVisible(true);
     
+    // Reset animation values
+    translateX.value = 0;
+    scale.value = 1;
+    opacity.value = 1;
+    
     // Hide status bar for iOS
     if (Platform.OS === 'ios') {
       StatusBar.setHidden(true, 'fade');
@@ -143,6 +203,11 @@ export default function CreateScreen() {
   const closeImageViewer = () => {
     setIsImageViewerVisible(false);
     setSelectedImageIndex(0);
+    
+    // Reset animation values
+    translateX.value = 0;
+    scale.value = 1;
+    opacity.value = 1;
     
     // Show status bar again
     if (Platform.OS === 'ios') {
@@ -164,6 +229,36 @@ export default function CreateScreen() {
     );
   };
 
+  const goToPreviousImageWithAnimation = () => {
+    if (!images.length) return;
+    
+    // Animate slide effect
+    translateX.value = withTiming(screenWidth, { duration: 200 }, () => {
+      runOnJS(setSelectedImageIndex)(prevIndex => 
+        prevIndex > 0 ? prevIndex - 1 : images.length - 1
+      );
+      translateX.value = -screenWidth;
+      translateX.value = withSpring(0);
+      scale.value = withSpring(1);
+      opacity.value = withSpring(1);
+    });
+  };
+
+  const goToNextImageWithAnimation = () => {
+    if (!images.length) return;
+    
+    // Animate slide effect
+    translateX.value = withTiming(-screenWidth, { duration: 200 }, () => {
+      runOnJS(setSelectedImageIndex)(prevIndex => 
+        prevIndex < images.length - 1 ? prevIndex + 1 : 0
+      );
+      translateX.value = screenWidth;
+      translateX.value = withSpring(0);
+      scale.value = withSpring(1);
+      opacity.value = withSpring(1);
+    });
+  };
+
   const handleImageLoadStart = (index: number) => {
     setImageLoadingStates(prev => ({ ...prev, [index]: true }));
   };
@@ -177,6 +272,15 @@ export default function CreateScreen() {
     setImageLoadingStates(prev => ({ ...prev, [index]: false }));
     Alert.alert('Error', 'Failed to load image');
   };
+
+  // Animated styles
+  const animatedImageStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { scale: scale.value }
+    ],
+    opacity: opacity.value,
+  }));
 
   return (
     <SafeAreaView style={styles.container}>
@@ -301,7 +405,7 @@ export default function CreateScreen() {
         </View>
       </ScrollView>
 
-      {/* Enhanced Full Screen Image Viewer Modal */}
+      {/* Enhanced Full Screen Image Viewer Modal with Swipe Gesture */}
       <Modal
         visible={isImageViewerVisible}
         transparent={true}
@@ -324,24 +428,33 @@ export default function CreateScreen() {
             <Text style={styles.imageCounter}>
               {selectedImageIndex + 1} / {images.length}
             </Text>
+            
+            {/* Swipe indicator */}
+            {images.length > 1 && (
+              <Text style={styles.swipeHint}>Swipe to navigate</Text>
+            )}
           </View>
 
-          {/* Main Image Display */}
-          <TouchableOpacity 
-            style={styles.imageViewerContent}
-            activeOpacity={1}
-            onPress={closeImageViewer}
-          >
-            {images[selectedImageIndex] && (
-              <Image 
-                source={{ uri: images[selectedImageIndex] }} 
-                style={styles.fullScreenImage}
-                resizeMode="contain"
-              />
-            )}
-          </TouchableOpacity>
+          {/* Main Image Display with Gesture */}
+          <GestureDetector gesture={panGesture}>
+            <Animated.View style={[styles.imageViewerContent, animatedImageStyle]}>
+              <TouchableOpacity 
+                style={styles.imageViewerContentTouch}
+                activeOpacity={1}
+                onPress={!isGestureActive ? closeImageViewer : undefined}
+              >
+                {images[selectedImageIndex] && (
+                  <Image 
+                    source={{ uri: images[selectedImageIndex] }} 
+                    style={styles.fullScreenImage}
+                    resizeMode="contain"
+                  />
+                )}
+              </TouchableOpacity>
+            </Animated.View>
+          </GestureDetector>
 
-          {/* Navigation Controls - Only show if more than 1 image */}
+          {/* Navigation Controls - Still available as backup */}
           {images.length > 1 && (
             <>
               <TouchableOpacity 
@@ -591,7 +704,21 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
+  swipeHint: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 12,
+    fontWeight: '400',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
   imageViewerContent: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerContentTouch: {
     flex: 1,
     width: '100%',
     justifyContent: 'center',

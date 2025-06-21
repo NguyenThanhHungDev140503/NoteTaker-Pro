@@ -16,8 +16,18 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Star, Share, CreditCard as Edit3, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Note } from '@/types/note';
 import { noteService } from '@/services/noteService';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Animated, { 
+  useSharedValue, 
+  useAnimatedStyle,
+  withSpring,
+  runOnJS,
+  withTiming,
+  interpolate,
+} from 'react-native-reanimated';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const SWIPE_THRESHOLD = 50;
 
 export default function NoteDetailScreen() {
   const { noteId } = useLocalSearchParams<{ noteId: string }>();
@@ -25,6 +35,51 @@ export default function NoteDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
+  const [isGestureActive, setIsGestureActive] = useState(false);
+
+  // Animated values for gesture
+  const translateX = useSharedValue(0);
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
+
+  // Gesture handlers
+  const panGesture = Gesture.Pan()
+    .onStart(() => {
+      runOnJS(setIsGestureActive)(true);
+    })
+    .onUpdate((event) => {
+      // Only handle horizontal swipes
+      if (Math.abs(event.translationY) > Math.abs(event.translationX)) {
+        return;
+      }
+      
+      translateX.value = event.translationX;
+      
+      // Add subtle scale effect during swipe
+      const progress = Math.abs(event.translationX) / screenWidth;
+      scale.value = interpolate(progress, [0, 0.5], [1, 0.95], 'clamp');
+      opacity.value = interpolate(progress, [0, 0.3], [1, 0.8], 'clamp');
+    })
+    .onEnd((event) => {
+      const shouldNavigate = Math.abs(event.translationX) > SWIPE_THRESHOLD;
+      
+      if (shouldNavigate && note && note.images.length > 1) {
+        if (event.translationX > 0) {
+          // Swipe right - go to previous image
+          runOnJS(goToPreviousImageWithAnimation)();
+        } else {
+          // Swipe left - go to next image
+          runOnJS(goToNextImageWithAnimation)();
+        }
+      } else {
+        // Return to original position
+        translateX.value = withSpring(0);
+        scale.value = withSpring(1);
+        opacity.value = withSpring(1);
+      }
+      
+      runOnJS(setIsGestureActive)(false);
+    });
 
   useEffect(() => {
     loadNote();
@@ -69,11 +124,21 @@ export default function NoteDetailScreen() {
   const handleImagePress = (index: number) => {
     setSelectedImageIndex(index);
     setIsImageViewerVisible(true);
+    
+    // Reset animation values
+    translateX.value = 0;
+    scale.value = 1;
+    opacity.value = 1;
   };
 
   const closeImageViewer = () => {
     setIsImageViewerVisible(false);
     setSelectedImageIndex(0);
+    
+    // Reset animation values
+    translateX.value = 0;
+    scale.value = 1;
+    opacity.value = 1;
   };
 
   const goToPreviousImage = () => {
@@ -89,6 +154,45 @@ export default function NoteDetailScreen() {
       prevIndex < note.images.length - 1 ? prevIndex + 1 : 0
     );
   };
+
+  const goToPreviousImageWithAnimation = () => {
+    if (!note?.images.length) return;
+    
+    // Animate slide effect
+    translateX.value = withTiming(screenWidth, { duration: 200 }, () => {
+      runOnJS(setSelectedImageIndex)(prevIndex => 
+        prevIndex > 0 ? prevIndex - 1 : note.images.length - 1
+      );
+      translateX.value = -screenWidth;
+      translateX.value = withSpring(0);
+      scale.value = withSpring(1);
+      opacity.value = withSpring(1);
+    });
+  };
+
+  const goToNextImageWithAnimation = () => {
+    if (!note?.images.length) return;
+    
+    // Animate slide effect
+    translateX.value = withTiming(-screenWidth, { duration: 200 }, () => {
+      runOnJS(setSelectedImageIndex)(prevIndex => 
+        prevIndex < note.images.length - 1 ? prevIndex + 1 : 0
+      );
+      translateX.value = screenWidth;
+      translateX.value = withSpring(0);
+      scale.value = withSpring(1);
+      opacity.value = withSpring(1);
+    });
+  };
+
+  // Animated styles
+  const animatedImageStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { scale: scale.value }
+    ],
+    opacity: opacity.value,
+  }));
 
   if (loading) {
     return (
@@ -227,7 +331,7 @@ export default function NoteDetailScreen() {
         )}
       </ScrollView>
 
-      {/* Full Screen Image Viewer Modal */}
+      {/* Full Screen Image Viewer Modal with Swipe Gesture */}
       {isImageViewerVisible && (
         <Modal
           visible={isImageViewerVisible}
@@ -251,22 +355,31 @@ export default function NoteDetailScreen() {
               <Text style={styles.imageCounter}>
                 {selectedImageIndex + 1} / {note.images.length}
               </Text>
+              
+              {/* Swipe indicator */}
+              {note.images.length > 1 && (
+                <Text style={styles.swipeHint}>Swipe to navigate</Text>
+              )}
             </View>
 
-            {/* Main Image Display */}
-            <TouchableOpacity 
-              style={styles.imageViewerContent}
-              activeOpacity={1}
-              onPress={closeImageViewer}
-            >
-              <Image 
-                source={{ uri: note.images[selectedImageIndex] }} 
-                style={styles.fullScreenImage}
-                resizeMode="contain"
-              />
-            </TouchableOpacity>
+            {/* Main Image Display with Gesture */}
+            <GestureDetector gesture={panGesture}>
+              <Animated.View style={[styles.imageViewerContent, animatedImageStyle]}>
+                <TouchableOpacity 
+                  style={styles.imageViewerContentTouch}
+                  activeOpacity={1}
+                  onPress={!isGestureActive ? closeImageViewer : undefined}
+                >
+                  <Image 
+                    source={{ uri: note.images[selectedImageIndex] }} 
+                    style={styles.fullScreenImage}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              </Animated.View>
+            </GestureDetector>
 
-            {/* Navigation Controls - Only show if more than 1 image */}
+            {/* Navigation Controls - Still available as backup */}
             {note.images.length > 1 && (
               <>
                 <TouchableOpacity 
@@ -508,7 +621,21 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
+  swipeHint: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 12,
+    fontWeight: '400',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
   imageViewerContent: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerContentTouch: {
     flex: 1,
     width: '100%',
     justifyContent: 'center',
