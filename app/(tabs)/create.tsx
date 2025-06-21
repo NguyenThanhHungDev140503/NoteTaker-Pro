@@ -12,6 +12,7 @@ import {
   Modal,
   StatusBar,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -48,6 +49,7 @@ export default function CreateScreen() {
   // Image viewer states
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
+  const [imageLoadingStates, setImageLoadingStates] = useState<{ [key: number]: boolean }>({});
 
   const titleInputRef = useRef<TextInput>(null);
   const contentInputRef = useRef<TextInput>(null);
@@ -87,6 +89,7 @@ export default function CreateScreen() {
               setContent('');
               setImages([]);
               setAudioRecordings([]);
+              setImageLoadingStates({});
               titleInputRef.current?.focus();
             },
           },
@@ -113,6 +116,12 @@ export default function CreateScreen() {
 
   const removeImage = (index: number) => {
     setImages(prev => prev.filter((_, i) => i !== index));
+    // Clear loading state for removed image
+    setImageLoadingStates(prev => {
+      const newStates = { ...prev };
+      delete newStates[index];
+      return newStates;
+    });
   };
 
   const removeAudio = (index: number) => {
@@ -121,13 +130,24 @@ export default function CreateScreen() {
 
   // Image viewer functions
   const handleImagePress = (index: number) => {
+    console.log('Image pressed:', index, 'URI:', images[index]);
     setSelectedImageIndex(index);
     setIsImageViewerVisible(true);
+    
+    // Hide status bar for iOS
+    if (Platform.OS === 'ios') {
+      StatusBar.setHidden(true, 'fade');
+    }
   };
 
   const closeImageViewer = () => {
     setIsImageViewerVisible(false);
     setSelectedImageIndex(0);
+    
+    // Show status bar again
+    if (Platform.OS === 'ios') {
+      StatusBar.setHidden(false, 'fade');
+    }
   };
 
   const goToPreviousImage = () => {
@@ -142,6 +162,20 @@ export default function CreateScreen() {
     setSelectedImageIndex(prevIndex => 
       prevIndex < images.length - 1 ? prevIndex + 1 : 0
     );
+  };
+
+  const handleImageLoadStart = (index: number) => {
+    setImageLoadingStates(prev => ({ ...prev, [index]: true }));
+  };
+
+  const handleImageLoadEnd = (index: number) => {
+    setImageLoadingStates(prev => ({ ...prev, [index]: false }));
+  };
+
+  const handleImageError = (index: number) => {
+    console.error('Image load error for index:', index);
+    setImageLoadingStates(prev => ({ ...prev, [index]: false }));
+    Alert.alert('Error', 'Failed to load image');
   };
 
   return (
@@ -193,18 +227,41 @@ export default function CreateScreen() {
                 horizontal 
                 showsHorizontalScrollIndicator={false}
                 style={styles.imageScrollView}
+                contentContainerStyle={styles.imageScrollContent}
               >
                 {images.map((uri, index) => (
-                  <View key={index} style={styles.imageWrapper}>
+                  <View key={`${uri}-${index}`} style={styles.imageWrapper}>
                     <TouchableOpacity
                       onPress={() => handleImagePress(index)}
-                      activeOpacity={0.8}
+                      activeOpacity={0.7}
+                      style={styles.imageButton}
                     >
-                      <Image source={{ uri }} style={styles.imagePreview} />
+                      <Image 
+                        source={{ uri }} 
+                        style={styles.imagePreview}
+                        onLoadStart={() => handleImageLoadStart(index)}
+                        onLoadEnd={() => handleImageLoadEnd(index)}
+                        onError={() => handleImageError(index)}
+                        resizeMode="cover"
+                      />
+                      
+                      {/* Loading Indicator */}
+                      {imageLoadingStates[index] && (
+                        <View style={styles.imageLoadingOverlay}>
+                          <ActivityIndicator size="small" color="#007AFF" />
+                        </View>
+                      )}
+                      
+                      {/* Image Number Badge */}
+                      <View style={styles.imageNumberBadge}>
+                        <Text style={styles.imageNumberText}>{index + 1}</Text>
+                      </View>
                     </TouchableOpacity>
+                    
                     <TouchableOpacity
                       style={styles.removeImageButton}
                       onPress={() => removeImage(index)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
                       <X size={16} color="#FFFFFF" />
                     </TouchableOpacity>
@@ -244,84 +301,85 @@ export default function CreateScreen() {
         </View>
       </ScrollView>
 
-      {/* Full Screen Image Viewer Modal */}
-      {isImageViewerVisible && images.length > 0 && (
-        <Modal
-          visible={isImageViewerVisible}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={closeImageViewer}
-          statusBarTranslucent={true}
-        >
-          <StatusBar hidden={true} />
-          <View style={styles.imageViewer}>
-            {/* Header Controls */}
-            <View style={styles.imageViewerHeader}>
-              <TouchableOpacity 
-                style={styles.closeButton} 
-                onPress={closeImageViewer}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <X size={28} color="#FFFFFF" />
-              </TouchableOpacity>
-              
-              <Text style={styles.imageCounter}>
-                {selectedImageIndex + 1} / {images.length}
-              </Text>
-            </View>
-
-            {/* Main Image Display */}
+      {/* Enhanced Full Screen Image Viewer Modal */}
+      <Modal
+        visible={isImageViewerVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closeImageViewer}
+        statusBarTranslucent={true}
+        presentationStyle="overFullScreen"
+      >
+        <View style={styles.imageViewer}>
+          {/* Header Controls */}
+          <View style={styles.imageViewerHeader}>
             <TouchableOpacity 
-              style={styles.imageViewerContent}
-              activeOpacity={1}
+              style={styles.closeButton} 
               onPress={closeImageViewer}
+              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
             >
+              <X size={28} color="#FFFFFF" />
+            </TouchableOpacity>
+            
+            <Text style={styles.imageCounter}>
+              {selectedImageIndex + 1} / {images.length}
+            </Text>
+          </View>
+
+          {/* Main Image Display */}
+          <TouchableOpacity 
+            style={styles.imageViewerContent}
+            activeOpacity={1}
+            onPress={closeImageViewer}
+          >
+            {images[selectedImageIndex] && (
               <Image 
                 source={{ uri: images[selectedImageIndex] }} 
                 style={styles.fullScreenImage}
                 resizeMode="contain"
               />
-            </TouchableOpacity>
-
-            {/* Navigation Controls - Only show if more than 1 image */}
-            {images.length > 1 && (
-              <>
-                <TouchableOpacity 
-                  style={[styles.navButton, styles.navButtonLeft]} 
-                  onPress={goToPreviousImage}
-                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-                >
-                  <ChevronLeft size={32} color="#FFFFFF" />
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.navButton, styles.navButtonRight]} 
-                  onPress={goToNextImage}
-                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-                >
-                  <ChevronRight size={32} color="#FFFFFF" />
-                </TouchableOpacity>
-              </>
             )}
+          </TouchableOpacity>
 
-            {/* Image Indicators */}
-            {images.length > 1 && (
-              <View style={styles.imageIndicators}>
-                {images.map((_, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={[
-                      styles.indicator,
-                      selectedImageIndex === index && styles.activeIndicator
-                    ]}
-                    onPress={() => setSelectedImageIndex(index)}
-                  />
-                ))}
-              </View>
-            )}
-          </View>
-        </Modal>
-      )}
+          {/* Navigation Controls - Only show if more than 1 image */}
+          {images.length > 1 && (
+            <>
+              <TouchableOpacity 
+                style={[styles.navButton, styles.navButtonLeft]} 
+                onPress={goToPreviousImage}
+                hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+              >
+                <ChevronLeft size={32} color="#FFFFFF" />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.navButton, styles.navButtonRight]} 
+                onPress={goToNextImage}
+                hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+              >
+                <ChevronRight size={32} color="#FFFFFF" />
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* Image Indicators */}
+          {images.length > 1 && (
+            <View style={styles.imageIndicators}>
+              {images.map((_, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.indicator,
+                    selectedImageIndex === index && styles.activeIndicator
+                  ]}
+                  onPress={() => setSelectedImageIndex(index)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -396,39 +454,72 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#374151',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   imageScrollView: {
-    marginTop: 8,
+    flexGrow: 0,
+  },
+  imageScrollContent: {
+    paddingHorizontal: 4,
   },
   imageWrapper: {
     position: 'relative',
-    marginRight: 12,
+    marginHorizontal: 6,
+  },
+  imageButton: {
+    position: 'relative',
   },
   imagePreview: {
     width: 120,
     height: 120,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: '#F3F4F6',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+  },
+  imageLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 12,
+  },
+  imageNumberBadge: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  imageNumberText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   removeImageButton: {
     position: 'absolute',
-    top: 4,
-    right: 4,
+    top: -6,
+    right: -6,
     backgroundColor: '#FF3B30',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
+    borderRadius: 14,
+    width: 28,
+    height: 28,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 1,
+      height: 2,
     },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   audioContainer: {
     marginTop: 16,
@@ -455,7 +546,7 @@ const styles = StyleSheet.create({
   removeAudioButton: {
     padding: 4,
   },
-  // Image Viewer Styles
+  // Enhanced Image Viewer Styles
   imageViewer: {
     flex: 1,
     backgroundColor: '#000000',
@@ -470,27 +561,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 50,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
     paddingHorizontal: 20,
     paddingBottom: 20,
     zIndex: 100,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   closeButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   imageCounter: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.7)',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 4,
   },
   imageViewerContent: {
     flex: 1,
@@ -510,10 +609,18 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 90,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   navButtonLeft: {
     left: 20,
@@ -523,7 +630,7 @@ const styles = StyleSheet.create({
   },
   imageIndicators: {
     position: 'absolute',
-    bottom: 40,
+    bottom: Platform.OS === 'ios' ? 60 : 40,
     left: 0,
     right: 0,
     flexDirection: 'row',
@@ -532,16 +639,24 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   indicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-    marginHorizontal: 4,
-  },
-  activeIndicator: {
-    backgroundColor: '#FFFFFF',
     width: 10,
     height: 10,
     borderRadius: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    marginHorizontal: 5,
+  },
+  activeIndicator: {
+    backgroundColor: '#FFFFFF',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
   },
 });
