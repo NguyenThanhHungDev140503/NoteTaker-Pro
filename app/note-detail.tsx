@@ -8,20 +8,34 @@ import {
   Image,
   Dimensions,
   Alert,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Star, Share, CreditCard as Edit3, Calendar, Camera, Mic, Play, Pause } from 'lucide-react-native';
+import { 
+  ArrowLeft, 
+  Star, 
+  Share, 
+  Edit3, 
+  Calendar, 
+  Camera, 
+  Mic, 
+  Play, 
+  X,
+  ChevronLeft,
+  ChevronRight
+} from 'lucide-react-native';
 import { Note } from '@/types/note';
 import { noteService } from '@/services/noteService';
 
-const { width: screenWidth } = Dimensions.get('window');
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 export default function NoteDetailScreen() {
   const { noteId } = useLocalSearchParams<{ noteId: string }>();
   const [note, setNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+  const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
 
   useEffect(() => {
     loadNote();
@@ -65,10 +79,24 @@ export default function NoteDetailScreen() {
 
   const handleImagePress = (index: number) => {
     setSelectedImageIndex(index);
+    setIsImageViewerVisible(true);
   };
 
   const closeImageViewer = () => {
+    setIsImageViewerVisible(false);
     setSelectedImageIndex(null);
+  };
+
+  const goToPreviousImage = () => {
+    if (!note || selectedImageIndex === null) return;
+    const newIndex = selectedImageIndex > 0 ? selectedImageIndex - 1 : note.images.length - 1;
+    setSelectedImageIndex(newIndex);
+  };
+
+  const goToNextImage = () => {
+    if (!note || selectedImageIndex === null) return;
+    const newIndex = selectedImageIndex < note.images.length - 1 ? selectedImageIndex + 1 : 0;
+    setSelectedImageIndex(newIndex);
   };
 
   if (loading) {
@@ -158,6 +186,9 @@ export default function NoteDetailScreen() {
                   activeOpacity={0.8}
                 >
                   <Image source={{ uri }} style={styles.image} />
+                  <View style={styles.imageOverlay}>
+                    <Text style={styles.imageNumber}>{index + 1}</Text>
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
@@ -201,29 +232,68 @@ export default function NoteDetailScreen() {
         )}
       </ScrollView>
 
-      {/* Full Screen Image Viewer */}
-      {selectedImageIndex !== null && (
+      {/* Full Screen Image Viewer Modal */}
+      <Modal
+        visible={isImageViewerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeImageViewer}
+      >
         <View style={styles.imageViewer}>
-          <TouchableOpacity 
-            style={styles.imageViewerOverlay} 
-            onPress={closeImageViewer}
-            activeOpacity={1}
-          >
-            <Image 
-              source={{ uri: note.images[selectedImageIndex] }} 
-              style={styles.fullScreenImage}
-              resizeMode="contain"
-            />
-            
+          {/* Header Controls */}
+          <View style={styles.imageViewerHeader}>
             <TouchableOpacity 
               style={styles.closeButton} 
               onPress={closeImageViewer}
             >
-              <Text style={styles.closeButtonText}>✕</Text>
+              <X size={24} color="#FFFFFF" />
             </TouchableOpacity>
-          </TouchableOpacity>
+            
+            {selectedImageIndex !== null && (
+              <Text style={styles.imageCounter}>
+                {selectedImageIndex + 1} / {note.images.length}
+              </Text>
+            )}
+          </View>
+
+          {/* Image Display */}
+          <View style={styles.imageViewerContent}>
+            {selectedImageIndex !== null && (
+              <Image 
+                source={{ uri: note.images[selectedImageIndex] }} 
+                style={styles.fullScreenImage}
+                resizeMode="contain"
+              />
+            )}
+          </View>
+
+          {/* Navigation Controls */}
+          {note.images.length > 1 && (
+            <>
+              <TouchableOpacity 
+                style={[styles.navButton, styles.navButtonLeft]} 
+                onPress={goToPreviousImage}
+              >
+                <ChevronLeft size={32} color="#FFFFFF" />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.navButton, styles.navButtonRight]} 
+                onPress={goToNextImage}
+              >
+                <ChevronRight size={32} color="#FFFFFF" />
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* Tap to close overlay */}
+          <TouchableOpacity 
+            style={styles.tapToCloseOverlay} 
+            onPress={closeImageViewer}
+            activeOpacity={1}
+          />
         </View>
-      )}
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -326,15 +396,30 @@ const styles = StyleSheet.create({
     marginHorizontal: -4,
   },
   imageContainer: {
-    width: (screenWidth - 56) / 2, // 20 padding left + 20 padding right + 16 gap
+    width: (screenWidth - 56) / 2,
     marginHorizontal: 4,
     marginBottom: 8,
+    position: 'relative',
   },
   image: {
     width: '100%',
     height: 150,
     borderRadius: 8,
     backgroundColor: '#F3F4F6',
+  },
+  imageOverlay: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  imageNumber: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   audioItem: {
     flexDirection: 'row',
@@ -375,38 +460,70 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     fontWeight: '500',
   },
+  // Image Viewer Styles
   imageViewer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+  },
+  imageViewerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 50,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    zIndex: 1000,
+    zIndex: 10,
   },
-  imageViewerOverlay: {
+  closeButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageCounter: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  imageViewerContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   fullScreenImage: {
     width: screenWidth,
-    height: '80%',
+    height: screenHeight * 0.8,
   },
-  closeButton: {
+  navButton: {
     position: 'absolute',
-    top: 60,
-    right: 20,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    top: '50%',
+    marginTop: -32,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
   },
-  closeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
+  navButtonLeft: {
+    left: 20,
+  },
+  navButtonRight: {
+    right: 20,
+  },
+  tapToCloseOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1,
   },
 });
