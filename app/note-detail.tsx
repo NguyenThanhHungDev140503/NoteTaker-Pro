@@ -9,10 +9,11 @@ import {
   Dimensions,
   Alert,
   Modal,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Star, Share, CreditCard as Edit3, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Star, Share, Edit3, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Note } from '@/types/note';
 import { noteService } from '@/services/noteService';
 
@@ -22,7 +23,7 @@ export default function NoteDetailScreen() {
   const { noteId } = useLocalSearchParams<{ noteId: string }>();
   const [note, setNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
 
   useEffect(() => {
@@ -72,19 +73,21 @@ export default function NoteDetailScreen() {
 
   const closeImageViewer = () => {
     setIsImageViewerVisible(false);
-    setSelectedImageIndex(null);
+    setSelectedImageIndex(0);
   };
 
   const goToPreviousImage = () => {
-    if (!note || selectedImageIndex === null) return;
-    const newIndex = selectedImageIndex > 0 ? selectedImageIndex - 1 : note.images.length - 1;
-    setSelectedImageIndex(newIndex);
+    if (!note?.images.length) return;
+    setSelectedImageIndex(prevIndex => 
+      prevIndex > 0 ? prevIndex - 1 : note.images.length - 1
+    );
   };
 
   const goToNextImage = () => {
-    if (!note || selectedImageIndex === null) return;
-    const newIndex = selectedImageIndex < note.images.length - 1 ? selectedImageIndex + 1 : 0;
-    setSelectedImageIndex(newIndex);
+    if (!note?.images.length) return;
+    setSelectedImageIndex(prevIndex => 
+      prevIndex < note.images.length - 1 ? prevIndex + 1 : 0
+    );
   };
 
   if (loading) {
@@ -173,7 +176,11 @@ export default function NoteDetailScreen() {
                   onPress={() => handleImagePress(index)}
                   activeOpacity={0.8}
                 >
-                  <Image source={{ uri }} style={styles.image} />
+                  <Image 
+                    source={{ uri }} 
+                    style={styles.image} 
+                    resizeMode="cover"
+                  />
                   <View style={styles.imageOverlay}>
                     <Text style={styles.imageNumber}>{index + 1}</Text>
                   </View>
@@ -221,67 +228,83 @@ export default function NoteDetailScreen() {
       </ScrollView>
 
       {/* Full Screen Image Viewer Modal */}
-      <Modal
-        visible={isImageViewerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={closeImageViewer}
-      >
-        <View style={styles.imageViewer}>
-          {/* Header Controls */}
-          <View style={styles.imageViewerHeader}>
-            <TouchableOpacity 
-              style={styles.closeButton} 
-              onPress={closeImageViewer}
-            >
-              <X size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-            
-            {selectedImageIndex !== null && (
+      {isImageViewerVisible && (
+        <Modal
+          visible={isImageViewerVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={closeImageViewer}
+          statusBarTranslucent={true}
+        >
+          <StatusBar hidden={true} />
+          <View style={styles.imageViewer}>
+            {/* Header Controls */}
+            <View style={styles.imageViewerHeader}>
+              <TouchableOpacity 
+                style={styles.closeButton} 
+                onPress={closeImageViewer}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <X size={28} color="#FFFFFF" />
+              </TouchableOpacity>
+              
               <Text style={styles.imageCounter}>
                 {selectedImageIndex + 1} / {note.images.length}
               </Text>
-            )}
-          </View>
+            </View>
 
-          {/* Image Display */}
-          <View style={styles.imageViewerContent}>
-            {selectedImageIndex !== null && (
+            {/* Main Image Display */}
+            <TouchableOpacity 
+              style={styles.imageViewerContent}
+              activeOpacity={1}
+              onPress={closeImageViewer}
+            >
               <Image 
                 source={{ uri: note.images[selectedImageIndex] }} 
                 style={styles.fullScreenImage}
                 resizeMode="contain"
               />
+            </TouchableOpacity>
+
+            {/* Navigation Controls - Only show if more than 1 image */}
+            {note.images.length > 1 && (
+              <>
+                <TouchableOpacity 
+                  style={[styles.navButton, styles.navButtonLeft]} 
+                  onPress={goToPreviousImage}
+                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                >
+                  <ChevronLeft size={32} color="#FFFFFF" />
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.navButton, styles.navButtonRight]} 
+                  onPress={goToNextImage}
+                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                >
+                  <ChevronRight size={32} color="#FFFFFF" />
+                </TouchableOpacity>
+              </>
+            )}
+
+            {/* Image Indicators */}
+            {note.images.length > 1 && (
+              <View style={styles.imageIndicators}>
+                {note.images.map((_, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.indicator,
+                      selectedImageIndex === index && styles.activeIndicator
+                    ]}
+                    onPress={() => setSelectedImageIndex(index)}
+                  />
+                ))}
+              </View>
             )}
           </View>
-
-          {/* Navigation Controls */}
-          {note.images.length > 1 && (
-            <>
-              <TouchableOpacity 
-                style={[styles.navButton, styles.navButtonLeft]} 
-                onPress={goToPreviousImage}
-              >
-                <ChevronLeft size={32} color="#FFFFFF" />
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.navButton, styles.navButtonRight]} 
-                onPress={goToNextImage}
-              >
-                <ChevronRight size={32} color="#FFFFFF" />
-              </TouchableOpacity>
-            </>
-          )}
-
-          {/* Tap to close overlay */}
-          <TouchableOpacity 
-            style={styles.tapToCloseOverlay} 
-            onPress={closeImageViewer}
-            activeOpacity={1}
-          />
-        </View>
-      </Modal>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -451,42 +474,50 @@ const styles = StyleSheet.create({
   // Image Viewer Styles
   imageViewer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    backgroundColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   imageViewerHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 50,
     paddingHorizontal: 20,
     paddingBottom: 20,
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
+    zIndex: 100,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
   closeButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   imageCounter: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.7)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   imageViewerContent: {
     flex: 1,
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
   fullScreenImage: {
     width: screenWidth,
-    height: screenHeight * 0.8,
+    height: screenHeight,
+    backgroundColor: 'transparent',
   },
   navButton: {
     position: 'absolute',
@@ -498,7 +529,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10,
+    zIndex: 90,
   },
   navButtonLeft: {
     left: 20,
@@ -506,12 +537,27 @@ const styles = StyleSheet.create({
   navButtonRight: {
     right: 20,
   },
-  tapToCloseOverlay: {
+  imageIndicators: {
     position: 'absolute',
-    top: 0,
+    bottom: 40,
     left: 0,
     right: 0,
-    bottom: 0,
-    zIndex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  indicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    marginHorizontal: 4,
+  },
+  activeIndicator: {
+    backgroundColor: '#FFFFFF',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
 });
