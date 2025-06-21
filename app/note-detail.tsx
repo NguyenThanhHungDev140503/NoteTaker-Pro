@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Star, Share, Edit3, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Star, Share, CreditCard as Edit3, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Note } from '@/types/note';
 import { noteService } from '@/services/noteService';
 
