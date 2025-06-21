@@ -6,10 +6,12 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { Star, Calendar, Camera, Mic, MoreVertical } from 'lucide-react-native';
 import { Note } from '@/types/note';
 import { noteService } from '@/services/noteService';
+import { router } from 'expo-router';
 
 interface NoteCardProps {
   note: Note;
@@ -49,6 +51,13 @@ export function NoteCard({ note, onUpdate, compact = false }: NoteCardProps) {
     );
   };
 
+  const handleViewNote = () => {
+    router.push({
+      pathname: '/note-detail',
+      params: { noteId: note.id }
+    });
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -72,6 +81,7 @@ export function NoteCard({ note, onUpdate, compact = false }: NoteCardProps) {
     <TouchableOpacity
       style={[styles.container, compact && styles.compactContainer]}
       activeOpacity={0.7}
+      onPress={handleViewNote}
     >
       <View style={styles.header}>
         <TouchableOpacity onPress={handleToggleFavorite}>
@@ -93,6 +103,30 @@ export function NoteCard({ note, onUpdate, compact = false }: NoteCardProps) {
       <Text style={styles.content} numberOfLines={compact ? 3 : 4}>
         {truncateText(note.content, compact ? 100 : 150)}
       </Text>
+
+      {/* Hiển thị hình ảnh preview */}
+      {note.images.length > 0 && (
+        <View style={styles.imagePreviewContainer}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.imagePreviewScroll}
+          >
+            {note.images.slice(0, 3).map((uri, index) => (
+              <Image 
+                key={index} 
+                source={{ uri }} 
+                style={styles.imagePreview}
+              />
+            ))}
+            {note.images.length > 3 && (
+              <View style={styles.moreImagesIndicator}>
+                <Text style={styles.moreImagesText}>+{note.images.length - 3}</Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      )}
 
       {(note.images.length > 0 || note.audioRecordings.length > 0) && (
         <View style={styles.mediaIndicators}>
@@ -159,6 +193,32 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     lineHeight: 18,
     marginBottom: 12,
+  },
+  imagePreviewContainer: {
+    marginBottom: 12,
+  },
+  imagePreviewScroll: {
+    flexDirection: 'row',
+  },
+  imagePreview: {
+    width: 60,
+    height: 60,
+    borderRadius: 6,
+    marginRight: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  moreImagesIndicator: {
+    width: 60,
+    height: 60,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moreImagesText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
   },
   mediaIndicators: {
     flexDirection: 'row',

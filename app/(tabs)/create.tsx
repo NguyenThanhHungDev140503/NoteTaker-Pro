@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -20,6 +21,7 @@ import {
   Play,
   Pause,
   Trash2,
+  X,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
@@ -149,17 +151,25 @@ export default function CreateScreen() {
           <MediaPicker onImagePicked={handleImagePicked} />
           
           {images.length > 0 && (
-            <View style={styles.mediaGrid}>
-              {images.map((uri, index) => (
-                <View key={index} style={styles.mediaItem}>
-                  <TouchableOpacity
-                    style={styles.removeButton}
-                    onPress={() => removeImage(index)}
-                  >
-                    <Trash2 size={16} color="#FF3B30" />
-                  </TouchableOpacity>
-                </View>
-              ))}
+            <View style={styles.imageContainer}>
+              <Text style={styles.mediaLabel}>Images ({images.length})</Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.imageScrollView}
+              >
+                {images.map((uri, index) => (
+                  <View key={index} style={styles.imageWrapper}>
+                    <Image source={{ uri }} style={styles.imagePreview} />
+                    <TouchableOpacity
+                      style={styles.removeImageButton}
+                      onPress={() => removeImage(index)}
+                    >
+                      <X size={16} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
             </View>
           )}
 
@@ -170,12 +180,16 @@ export default function CreateScreen() {
           />
 
           {audioRecordings.length > 0 && (
-            <View style={styles.audioList}>
+            <View style={styles.audioContainer}>
+              <Text style={styles.mediaLabel}>Audio Recordings ({audioRecordings.length})</Text>
               {audioRecordings.map((uri, index) => (
                 <View key={index} style={styles.audioItem}>
-                  <Text style={styles.audioText}>
-                    Audio Recording {index + 1}
-                  </Text>
+                  <View style={styles.audioInfo}>
+                    <Mic size={16} color="#007AFF" />
+                    <Text style={styles.audioText}>
+                      Audio Recording {index + 1}
+                    </Text>
+                  </View>
                   <TouchableOpacity
                     style={styles.removeAudioButton}
                     onPress={() => removeAudio(index)}
@@ -255,22 +269,38 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     marginBottom: 12,
   },
-  mediaGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginVertical: 12,
+  imageContainer: {
+    marginVertical: 16,
   },
-  mediaItem: {
+  mediaLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  imageScrollView: {
+    marginTop: 8,
+  },
+  imageWrapper: {
     position: 'relative',
-    margin: 4,
+    marginRight: 12,
   },
-  removeButton: {
+  imagePreview: {
+    width: 120,
+    height: 120,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  removeImageButton: {
     position: 'absolute',
     top: 4,
     right: 4,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FF3B30',
     borderRadius: 12,
-    padding: 4,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -280,21 +310,27 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  audioList: {
-    marginTop: 12,
+  audioContainer: {
+    marginTop: 16,
   },
   audioItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F8FAFC',
     padding: 12,
     borderRadius: 8,
     marginBottom: 8,
   },
+  audioInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
   audioText: {
     fontSize: 14,
     color: '#374151',
+    marginLeft: 8,
   },
   removeAudioButton: {
     padding: 4,
