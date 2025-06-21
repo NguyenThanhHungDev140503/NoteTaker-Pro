@@ -8,7 +8,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import { Star, Calendar, Camera, Mic, MoreVertical } from 'lucide-react-native';
+import { Star, Calendar, Camera, Mic, MoveVertical as MoreVertical } from 'lucide-react-native';
 import { Note } from '@/types/note';
 import { noteService } from '@/services/noteService';
 import { router } from 'expo-router';
