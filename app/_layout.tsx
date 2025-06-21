@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { View, Text } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { authService } from '@/services/authService';
 
@@ -45,31 +46,35 @@ export default function RootLayout() {
   // Show loading while checking auth state
   if (isAuthenticated === null) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-        <Text style={{ fontSize: 18, color: '#333' }}>Loading SuperNote...</Text>
-      </View>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+          <Text style={{ fontSize: 18, color: '#333' }}>Loading SuperNote...</Text>
+        </View>
+      </GestureHandlerRootView>
     );
   }
 
   // Show configuration message if Supabase is not set up
   if (!isSupabaseConfigured) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', padding: 20 }}>
-        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#333', marginBottom: 10 }}>
-          Supabase Configuration Required
-        </Text>
-        <Text style={{ fontSize: 16, color: '#666', textAlign: 'center', lineHeight: 24 }}>
-          Please update your .env file with your Supabase project URL and anonymous key to continue.
-        </Text>
-        <Text style={{ fontSize: 14, color: '#999', textAlign: 'center', marginTop: 10 }}>
-          You can find these values in your Supabase project settings under 'API'.
-        </Text>
-      </View>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', padding: 20 }}>
+          <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#333', marginBottom: 10 }}>
+            Supabase Configuration Required
+          </Text>
+          <Text style={{ fontSize: 16, color: '#666', textAlign: 'center', lineHeight: 24 }}>
+            Please update your .env file with your Supabase project URL and anonymous key to continue.
+          </Text>
+          <Text style={{ fontSize: 14, color: '#999', textAlign: 'center', marginTop: 10 }}>
+            You can find these values in your Supabase project settings under 'API'.
+          </Text>
+        </View>
+      </GestureHandlerRootView>
     );
   }
 
   return (
-    <>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <Stack screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
           <>
@@ -82,6 +87,6 @@ export default function RootLayout() {
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style="auto" />
-    </>
+    </GestureHandlerRootView>
   );
 }
