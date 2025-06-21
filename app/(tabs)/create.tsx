@@ -63,6 +63,10 @@ export default function CreateScreen() {
   const [imageLoadingStates, setImageLoadingStates] = useState<{ [key: number]: boolean }>({});
   const [isGestureActive, setIsGestureActive] = useState(false);
 
+  // Component mounted state tracking
+  const isMountedRef = useRef(true);
+  const gestureInProgressRef = useRef(false);
+
   // Animated values for gesture
   const translateX = useSharedValue(0);
   const scale = useSharedValue(1);
@@ -71,41 +75,123 @@ export default function CreateScreen() {
   const titleInputRef = useRef<TextInput>(null);
   const contentInputRef = useRef<TextInput>(null);
 
-  // Safe navigation helpers
+  // Component cleanup
+  React.useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      try {
+        cancelAnimation(translateX);
+        cancelAnimation(scale);
+        cancelAnimation(opacity);
+      } catch (error) {
+        console.warn('Cleanup error:', error);
+      }
+    };
+  }, []);
+
+  // Safe state update helper
+  const safeSetState = (callback: () => void) => {
+    if (isMountedRef.current) {
+      try {
+        callback();
+      } catch (error) {
+        console.warn('Safe state update error:', error);
+      }
+    }
+  };
+
+  // Enhanced safe navigation helpers
   const safeSetSelectedImageIndex = (newIndex: number) => {
-    if (images.length === 0) return;
+    if (!isMountedRef.current || images.length === 0) return;
     
     const safeIndex = Math.max(0, Math.min(newIndex, images.length - 1));
-    setSelectedImageIndex(safeIndex);
+    safeSetState(() => setSelectedImageIndex(safeIndex));
   };
 
   const goToPreviousImageSafe = () => {
-    if (images.length <= 1) return;
+    if (!isMountedRef.current || images.length <= 1 || gestureInProgressRef.current) return;
+    
     const newIndex = selectedImageIndex > 0 ? selectedImageIndex - 1 : images.length - 1;
     safeSetSelectedImageIndex(newIndex);
   };
 
   const goToNextImageSafe = () => {
-    if (images.length <= 1) return;
+    if (!isMountedRef.current || images.length <= 1 || gestureInProgressRef.current) return;
+    
     const newIndex = selectedImageIndex < images.length - 1 ? selectedImageIndex + 1 : 0;
     safeSetSelectedImageIndex(newIndex);
   };
 
-  // Enhanced gesture handlers with better error handling
+  // Simplified animation functions - avoid complex timing callbacks
+  const goToPreviousImageWithAnimation = () => {
+    if (!isMountedRef.current || images.length <= 1 || gestureInProgressRef.current) return;
+    
+    gestureInProgressRef.current = true;
+    
+    try {
+      // Immediate navigation without complex animation callbacks
+      goToPreviousImageSafe();
+      
+      // Simple slide animation
+      translateX.value = withSpring(0, { damping: 20, stiffness: 150 }, () => {
+        'worklet';
+        if (isMountedRef.current) {
+          runOnJS(() => {
+            gestureInProgressRef.current = false;
+          })();
+        }
+      });
+      scale.value = withSpring(1, { damping: 20, stiffness: 150 });
+      opacity.value = withSpring(1, { damping: 20, stiffness: 150 });
+    } catch (error) {
+      console.warn('Previous animation error:', error);
+      gestureInProgressRef.current = false;
+      goToPreviousImageSafe();
+    }
+  };
+
+  const goToNextImageWithAnimation = () => {
+    if (!isMountedRef.current || images.length <= 1 || gestureInProgressRef.current) return;
+    
+    gestureInProgressRef.current = true;
+    
+    try {
+      // Immediate navigation without complex animation callbacks
+      goToNextImageSafe();
+      
+      // Simple slide animation
+      translateX.value = withSpring(0, { damping: 20, stiffness: 150 }, () => {
+        'worklet';
+        if (isMountedRef.current) {
+          runOnJS(() => {
+            gestureInProgressRef.current = false;
+          })();
+        }
+      });
+      scale.value = withSpring(1, { damping: 20, stiffness: 150 });
+      opacity.value = withSpring(1, { damping: 20, stiffness: 150 });
+    } catch (error) {
+      console.warn('Next animation error:', error);
+      gestureInProgressRef.current = false;
+      goToNextImageSafe();
+    }
+  };
+
+  // Enhanced gesture handlers with bulletproof error handling
   const panGesture = Gesture.Pan()
     .onStart(() => {
       'worklet';
-      if (images.length <= 1) return;
+      if (!isMountedRef.current || images.length <= 1 || gestureInProgressRef.current) return;
       
       try {
-        runOnJS(setIsGestureActive)(true);
+        runOnJS(safeSetState)(() => setIsGestureActive(true));
       } catch (error) {
         console.warn('Gesture start error:', error);
       }
     })
     .onUpdate((event) => {
       'worklet';
-      if (images.length <= 1 || !event) return;
+      if (!isMountedRef.current || images.length <= 1 || !event || gestureInProgressRef.current) return;
       
       try {
         // Only handle horizontal swipes
@@ -113,24 +199,39 @@ export default function CreateScreen() {
           return;
         }
         
-        translateX.value = event.translationX;
+        // Limit translation to screen width
+        const limitedTranslationX = Math.max(-screenWidth, Math.min(screenWidth, event.translationX));
+        translateX.value = limitedTranslationX;
         
-        // Add subtle scale effect during swipe
-        const progress = Math.abs(event.translationX) / screenWidth;
+        // Add subtle visual feedback
+        const progress = Math.abs(limitedTranslationX) / screenWidth;
         scale.value = interpolate(progress, [0, 0.5], [1, 0.95], 'clamp');
         opacity.value = interpolate(progress, [0, 0.3], [1, 0.8], 'clamp');
       } catch (error) {
         console.warn('Gesture update error:', error);
+        // Reset to safe state
+        translateX.value = 0;
+        scale.value = 1;
+        opacity.value = 1;
       }
     })
     .onEnd((event) => {
       'worklet';
-      if (images.length <= 1 || !event) {
-        // Reset values safely
+      if (!isMountedRef.current || gestureInProgressRef.current) {
+        // Always reset to safe state
         translateX.value = withSpring(0);
         scale.value = withSpring(1);
         opacity.value = withSpring(1);
-        runOnJS(setIsGestureActive)(false);
+        runOnJS(safeSetState)(() => setIsGestureActive(false));
+        return;
+      }
+
+      if (images.length <= 1 || !event) {
+        // Safe fallback reset
+        translateX.value = withSpring(0);
+        scale.value = withSpring(1);
+        opacity.value = withSpring(1);
+        runOnJS(safeSetState)(() => setIsGestureActive(false));
         return;
       }
       
@@ -139,10 +240,8 @@ export default function CreateScreen() {
         
         if (shouldNavigate) {
           if (event.translationX > 0) {
-            // Swipe right - go to previous image
             runOnJS(goToPreviousImageWithAnimation)();
           } else {
-            // Swipe left - go to next image
             runOnJS(goToNextImageWithAnimation)();
           }
         } else {
@@ -152,20 +251,21 @@ export default function CreateScreen() {
           opacity.value = withSpring(1);
         }
         
-        runOnJS(setIsGestureActive)(false);
+        runOnJS(safeSetState)(() => setIsGestureActive(false));
       } catch (error) {
         console.warn('Gesture end error:', error);
-        // Fallback: reset to safe state
+        // Critical fallback
         translateX.value = withSpring(0);
         scale.value = withSpring(1);
         opacity.value = withSpring(1);
-        runOnJS(setIsGestureActive)(false);
+        runOnJS(safeSetState)(() => setIsGestureActive(false));
       }
     })
     .onFinalize(() => {
       'worklet';
-      // Ensure we always reset gesture state
-      runOnJS(setIsGestureActive)(false);
+      // Ensure we ALWAYS reset gesture state
+      runOnJS(safeSetState)(() => setIsGestureActive(false));
+      gestureInProgressRef.current = false;
     });
 
   const handleSave = async () => {
@@ -255,7 +355,7 @@ export default function CreateScreen() {
     setAudioRecordings(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Image viewer functions with enhanced error handling
+  // Enhanced image viewer functions
   const handleImagePress = (index: number) => {
     console.log('Image pressed:', index, 'URI:', images[index]);
     
@@ -264,21 +364,25 @@ export default function CreateScreen() {
       return;
     }
     
-    setSelectedImageIndex(index);
-    setIsImageViewerVisible(true);
-    
-    // Reset animation values safely
+    // Stop any ongoing animations
     try {
       cancelAnimation(translateX);
       cancelAnimation(scale);
       cancelAnimation(opacity);
-      
-      translateX.value = 0;
-      scale.value = 1;
-      opacity.value = 1;
     } catch (error) {
-      console.warn('Animation reset error:', error);
+      console.warn('Animation cancel error:', error);
     }
+
+    // Reset all states
+    gestureInProgressRef.current = false;
+    setIsGestureActive(false);
+    setSelectedImageIndex(index);
+    setIsImageViewerVisible(true);
+    
+    // Reset animation values safely
+    translateX.value = 0;
+    scale.value = 1;
+    opacity.value = 1;
     
     // Hide status bar for iOS
     if (Platform.OS === 'ios') {
@@ -289,8 +393,9 @@ export default function CreateScreen() {
   const closeImageViewer = () => {
     setIsImageViewerVisible(false);
     setIsGestureActive(false);
+    gestureInProgressRef.current = false;
     
-    // Reset animation values safely
+    // Critical cleanup with error handling
     try {
       cancelAnimation(translateX);
       cancelAnimation(scale);
@@ -310,57 +415,13 @@ export default function CreateScreen() {
   };
 
   const goToPreviousImage = () => {
-    if (images.length <= 1) return;
+    if (images.length <= 1 || gestureInProgressRef.current) return;
     goToPreviousImageSafe();
   };
 
   const goToNextImage = () => {
-    if (images.length <= 1) return;
+    if (images.length <= 1 || gestureInProgressRef.current) return;
     goToNextImageSafe();
-  };
-
-  const goToPreviousImageWithAnimation = () => {
-    if (images.length <= 1) return;
-    
-    try {
-      // Animate slide effect
-      translateX.value = withTiming(screenWidth, { duration: 200 }, (finished) => {
-        'worklet';
-        if (finished) {
-          runOnJS(goToPreviousImageSafe)();
-          translateX.value = -screenWidth;
-          translateX.value = withSpring(0, { damping: 15, stiffness: 150 });
-          scale.value = withSpring(1, { damping: 15, stiffness: 150 });
-          opacity.value = withSpring(1, { damping: 15, stiffness: 150 });
-        }
-      });
-    } catch (error) {
-      console.warn('Animation error:', error);
-      // Fallback to direct navigation
-      goToPreviousImageSafe();
-    }
-  };
-
-  const goToNextImageWithAnimation = () => {
-    if (images.length <= 1) return;
-    
-    try {
-      // Animate slide effect
-      translateX.value = withTiming(-screenWidth, { duration: 200 }, (finished) => {
-        'worklet';
-        if (finished) {
-          runOnJS(goToNextImageSafe)();
-          translateX.value = screenWidth;
-          translateX.value = withSpring(0, { damping: 15, stiffness: 150 });
-          scale.value = withSpring(1, { damping: 15, stiffness: 150 });
-          opacity.value = withSpring(1, { damping: 15, stiffness: 150 });
-        }
-      });
-    } catch (error) {
-      console.warn('Animation error:', error);
-      // Fallback to direct navigation
-      goToNextImageSafe();
-    }
   };
 
   const handleImageLoadStart = (index: number) => {
@@ -377,18 +438,19 @@ export default function CreateScreen() {
     Alert.alert('Error', 'Failed to load image');
   };
 
-  // Animated styles with error handling
+  // Safe animated styles with comprehensive error handling
   const animatedImageStyle = useAnimatedStyle(() => {
     try {
       return {
         transform: [
-          { translateX: translateX.value },
-          { scale: scale.value }
+          { translateX: translateX.value || 0 },
+          { scale: scale.value || 1 }
         ],
-        opacity: opacity.value,
+        opacity: opacity.value || 1,
       };
     } catch (error) {
       console.warn('Animated style error:', error);
+      // Safe fallback values
       return {
         transform: [
           { translateX: 0 },
@@ -522,7 +584,7 @@ export default function CreateScreen() {
         </View>
       </ScrollView>
 
-      {/* Enhanced Full Screen Image Viewer Modal with Swipe Gesture */}
+      {/* Enhanced Full Screen Image Viewer Modal with Safe Rendering */}
       <Modal
         visible={isImageViewerVisible}
         transparent={true}
@@ -552,14 +614,17 @@ export default function CreateScreen() {
             )}
           </View>
 
-          {/* Main Image Display with Gesture */}
-          {images.length > 0 && selectedImageIndex < images.length && (
+          {/* Main Image Display with Enhanced Safety */}
+          {images.length > 0 && 
+           selectedImageIndex >= 0 && 
+           selectedImageIndex < images.length && 
+           images[selectedImageIndex] && (
             <GestureDetector gesture={panGesture}>
               <Animated.View style={[styles.imageViewerContent, animatedImageStyle]}>
                 <TouchableOpacity 
                   style={styles.imageViewerContentTouch}
                   activeOpacity={1}
-                  onPress={!isGestureActive ? closeImageViewer : undefined}
+                  onPress={!isGestureActive && !gestureInProgressRef.current ? closeImageViewer : undefined}
                 >
                   <Image 
                     source={{ uri: images[selectedImageIndex] }} 
@@ -574,8 +639,8 @@ export default function CreateScreen() {
             </GestureDetector>
           )}
 
-          {/* Navigation Controls - Still available as backup */}
-          {images.length > 1 && (
+          {/* Navigation Controls - Enhanced with Safety Checks */}
+          {images.length > 1 && !gestureInProgressRef.current && (
             <>
               <TouchableOpacity 
                 style={[styles.navButton, styles.navButtonLeft]} 
@@ -595,7 +660,7 @@ export default function CreateScreen() {
             </>
           )}
 
-          {/* Image Indicators */}
+          {/* Image Indicators with Safety Checks */}
           {images.length > 1 && (
             <View style={styles.imageIndicators}>
               {images.map((_, index) => (
@@ -605,7 +670,7 @@ export default function CreateScreen() {
                     styles.indicator,
                     selectedImageIndex === index && styles.activeIndicator
                   ]}
-                  onPress={() => safeSetSelectedImageIndex(index)}
+                  onPress={() => !gestureInProgressRef.current && safeSetSelectedImageIndex(index)}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 />
               ))}
