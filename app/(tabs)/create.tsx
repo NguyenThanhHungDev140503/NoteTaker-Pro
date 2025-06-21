@@ -43,6 +43,7 @@ import Animated, {
   runOnJS,
   withTiming,
   interpolate,
+  cancelAnimation,
 } from 'react-native-reanimated';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -70,42 +71,100 @@ export default function CreateScreen() {
   const titleInputRef = useRef<TextInput>(null);
   const contentInputRef = useRef<TextInput>(null);
 
-  // Gesture handlers
+  // Safe navigation helpers
+  const safeSetSelectedImageIndex = (newIndex: number) => {
+    if (images.length === 0) return;
+    
+    const safeIndex = Math.max(0, Math.min(newIndex, images.length - 1));
+    setSelectedImageIndex(safeIndex);
+  };
+
+  const goToPreviousImageSafe = () => {
+    if (images.length <= 1) return;
+    const newIndex = selectedImageIndex > 0 ? selectedImageIndex - 1 : images.length - 1;
+    safeSetSelectedImageIndex(newIndex);
+  };
+
+  const goToNextImageSafe = () => {
+    if (images.length <= 1) return;
+    const newIndex = selectedImageIndex < images.length - 1 ? selectedImageIndex + 1 : 0;
+    safeSetSelectedImageIndex(newIndex);
+  };
+
+  // Enhanced gesture handlers with better error handling
   const panGesture = Gesture.Pan()
     .onStart(() => {
-      runOnJS(setIsGestureActive)(true);
+      'worklet';
+      if (images.length <= 1) return;
+      
+      try {
+        runOnJS(setIsGestureActive)(true);
+      } catch (error) {
+        console.warn('Gesture start error:', error);
+      }
     })
     .onUpdate((event) => {
-      // Only handle horizontal swipes
-      if (Math.abs(event.translationY) > Math.abs(event.translationX)) {
-        return;
+      'worklet';
+      if (images.length <= 1 || !event) return;
+      
+      try {
+        // Only handle horizontal swipes
+        if (Math.abs(event.translationY) > Math.abs(event.translationX)) {
+          return;
+        }
+        
+        translateX.value = event.translationX;
+        
+        // Add subtle scale effect during swipe
+        const progress = Math.abs(event.translationX) / screenWidth;
+        scale.value = interpolate(progress, [0, 0.5], [1, 0.95], 'clamp');
+        opacity.value = interpolate(progress, [0, 0.3], [1, 0.8], 'clamp');
+      } catch (error) {
+        console.warn('Gesture update error:', error);
       }
-      
-      translateX.value = event.translationX;
-      
-      // Add subtle scale effect during swipe
-      const progress = Math.abs(event.translationX) / screenWidth;
-      scale.value = interpolate(progress, [0, 0.5], [1, 0.95], 'clamp');
-      opacity.value = interpolate(progress, [0, 0.3], [1, 0.8], 'clamp');
     })
     .onEnd((event) => {
-      const shouldNavigate = Math.abs(event.translationX) > SWIPE_THRESHOLD;
-      
-      if (shouldNavigate && images.length > 1) {
-        if (event.translationX > 0) {
-          // Swipe right - go to previous image
-          runOnJS(goToPreviousImageWithAnimation)();
-        } else {
-          // Swipe left - go to next image
-          runOnJS(goToNextImageWithAnimation)();
-        }
-      } else {
-        // Return to original position
+      'worklet';
+      if (images.length <= 1 || !event) {
+        // Reset values safely
         translateX.value = withSpring(0);
         scale.value = withSpring(1);
         opacity.value = withSpring(1);
+        runOnJS(setIsGestureActive)(false);
+        return;
       }
       
+      try {
+        const shouldNavigate = Math.abs(event.translationX) > SWIPE_THRESHOLD;
+        
+        if (shouldNavigate) {
+          if (event.translationX > 0) {
+            // Swipe right - go to previous image
+            runOnJS(goToPreviousImageWithAnimation)();
+          } else {
+            // Swipe left - go to next image
+            runOnJS(goToNextImageWithAnimation)();
+          }
+        } else {
+          // Return to original position
+          translateX.value = withSpring(0);
+          scale.value = withSpring(1);
+          opacity.value = withSpring(1);
+        }
+        
+        runOnJS(setIsGestureActive)(false);
+      } catch (error) {
+        console.warn('Gesture end error:', error);
+        // Fallback: reset to safe state
+        translateX.value = withSpring(0);
+        scale.value = withSpring(1);
+        opacity.value = withSpring(1);
+        runOnJS(setIsGestureActive)(false);
+      }
+    })
+    .onFinalize(() => {
+      'worklet';
+      // Ensure we always reset gesture state
       runOnJS(setIsGestureActive)(false);
     });
 
@@ -145,6 +204,7 @@ export default function CreateScreen() {
               setImages([]);
               setAudioRecordings([]);
               setImageLoadingStates({});
+              setSelectedImageIndex(0);
               titleInputRef.current?.focus();
             },
           },
@@ -170,7 +230,19 @@ export default function CreateScreen() {
   };
 
   const removeImage = (index: number) => {
-    setImages(prev => prev.filter((_, i) => i !== index));
+    setImages(prev => {
+      const newImages = prev.filter((_, i) => i !== index);
+      
+      // Adjust selected index if necessary
+      if (selectedImageIndex >= newImages.length && newImages.length > 0) {
+        setSelectedImageIndex(newImages.length - 1);
+      } else if (newImages.length === 0) {
+        setSelectedImageIndex(0);
+      }
+      
+      return newImages;
+    });
+    
     // Clear loading state for removed image
     setImageLoadingStates(prev => {
       const newStates = { ...prev };
@@ -183,16 +255,30 @@ export default function CreateScreen() {
     setAudioRecordings(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Image viewer functions
+  // Image viewer functions with enhanced error handling
   const handleImagePress = (index: number) => {
     console.log('Image pressed:', index, 'URI:', images[index]);
+    
+    if (index < 0 || index >= images.length) {
+      console.warn('Invalid image index:', index);
+      return;
+    }
+    
     setSelectedImageIndex(index);
     setIsImageViewerVisible(true);
     
-    // Reset animation values
-    translateX.value = 0;
-    scale.value = 1;
-    opacity.value = 1;
+    // Reset animation values safely
+    try {
+      cancelAnimation(translateX);
+      cancelAnimation(scale);
+      cancelAnimation(opacity);
+      
+      translateX.value = 0;
+      scale.value = 1;
+      opacity.value = 1;
+    } catch (error) {
+      console.warn('Animation reset error:', error);
+    }
     
     // Hide status bar for iOS
     if (Platform.OS === 'ios') {
@@ -202,12 +288,20 @@ export default function CreateScreen() {
 
   const closeImageViewer = () => {
     setIsImageViewerVisible(false);
-    setSelectedImageIndex(0);
+    setIsGestureActive(false);
     
-    // Reset animation values
-    translateX.value = 0;
-    scale.value = 1;
-    opacity.value = 1;
+    // Reset animation values safely
+    try {
+      cancelAnimation(translateX);
+      cancelAnimation(scale);
+      cancelAnimation(opacity);
+      
+      translateX.value = 0;
+      scale.value = 1;
+      opacity.value = 1;
+    } catch (error) {
+      console.warn('Animation cleanup error:', error);
+    }
     
     // Show status bar again
     if (Platform.OS === 'ios') {
@@ -216,47 +310,57 @@ export default function CreateScreen() {
   };
 
   const goToPreviousImage = () => {
-    if (!images.length) return;
-    setSelectedImageIndex(prevIndex => 
-      prevIndex > 0 ? prevIndex - 1 : images.length - 1
-    );
+    if (images.length <= 1) return;
+    goToPreviousImageSafe();
   };
 
   const goToNextImage = () => {
-    if (!images.length) return;
-    setSelectedImageIndex(prevIndex => 
-      prevIndex < images.length - 1 ? prevIndex + 1 : 0
-    );
+    if (images.length <= 1) return;
+    goToNextImageSafe();
   };
 
   const goToPreviousImageWithAnimation = () => {
-    if (!images.length) return;
+    if (images.length <= 1) return;
     
-    // Animate slide effect
-    translateX.value = withTiming(screenWidth, { duration: 200 }, () => {
-      runOnJS(setSelectedImageIndex)(prevIndex => 
-        prevIndex > 0 ? prevIndex - 1 : images.length - 1
-      );
-      translateX.value = -screenWidth;
-      translateX.value = withSpring(0);
-      scale.value = withSpring(1);
-      opacity.value = withSpring(1);
-    });
+    try {
+      // Animate slide effect
+      translateX.value = withTiming(screenWidth, { duration: 200 }, (finished) => {
+        'worklet';
+        if (finished) {
+          runOnJS(goToPreviousImageSafe)();
+          translateX.value = -screenWidth;
+          translateX.value = withSpring(0, { damping: 15, stiffness: 150 });
+          scale.value = withSpring(1, { damping: 15, stiffness: 150 });
+          opacity.value = withSpring(1, { damping: 15, stiffness: 150 });
+        }
+      });
+    } catch (error) {
+      console.warn('Animation error:', error);
+      // Fallback to direct navigation
+      goToPreviousImageSafe();
+    }
   };
 
   const goToNextImageWithAnimation = () => {
-    if (!images.length) return;
+    if (images.length <= 1) return;
     
-    // Animate slide effect
-    translateX.value = withTiming(-screenWidth, { duration: 200 }, () => {
-      runOnJS(setSelectedImageIndex)(prevIndex => 
-        prevIndex < images.length - 1 ? prevIndex + 1 : 0
-      );
-      translateX.value = screenWidth;
-      translateX.value = withSpring(0);
-      scale.value = withSpring(1);
-      opacity.value = withSpring(1);
-    });
+    try {
+      // Animate slide effect
+      translateX.value = withTiming(-screenWidth, { duration: 200 }, (finished) => {
+        'worklet';
+        if (finished) {
+          runOnJS(goToNextImageSafe)();
+          translateX.value = screenWidth;
+          translateX.value = withSpring(0, { damping: 15, stiffness: 150 });
+          scale.value = withSpring(1, { damping: 15, stiffness: 150 });
+          opacity.value = withSpring(1, { damping: 15, stiffness: 150 });
+        }
+      });
+    } catch (error) {
+      console.warn('Animation error:', error);
+      // Fallback to direct navigation
+      goToNextImageSafe();
+    }
   };
 
   const handleImageLoadStart = (index: number) => {
@@ -273,14 +377,27 @@ export default function CreateScreen() {
     Alert.alert('Error', 'Failed to load image');
   };
 
-  // Animated styles
-  const animatedImageStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { scale: scale.value }
-    ],
-    opacity: opacity.value,
-  }));
+  // Animated styles with error handling
+  const animatedImageStyle = useAnimatedStyle(() => {
+    try {
+      return {
+        transform: [
+          { translateX: translateX.value },
+          { scale: scale.value }
+        ],
+        opacity: opacity.value,
+      };
+    } catch (error) {
+      console.warn('Animated style error:', error);
+      return {
+        transform: [
+          { translateX: 0 },
+          { scale: 1 }
+        ],
+        opacity: 1,
+      };
+    }
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -436,23 +553,26 @@ export default function CreateScreen() {
           </View>
 
           {/* Main Image Display with Gesture */}
-          <GestureDetector gesture={panGesture}>
-            <Animated.View style={[styles.imageViewerContent, animatedImageStyle]}>
-              <TouchableOpacity 
-                style={styles.imageViewerContentTouch}
-                activeOpacity={1}
-                onPress={!isGestureActive ? closeImageViewer : undefined}
-              >
-                {images[selectedImageIndex] && (
+          {images.length > 0 && selectedImageIndex < images.length && (
+            <GestureDetector gesture={panGesture}>
+              <Animated.View style={[styles.imageViewerContent, animatedImageStyle]}>
+                <TouchableOpacity 
+                  style={styles.imageViewerContentTouch}
+                  activeOpacity={1}
+                  onPress={!isGestureActive ? closeImageViewer : undefined}
+                >
                   <Image 
                     source={{ uri: images[selectedImageIndex] }} 
                     style={styles.fullScreenImage}
                     resizeMode="contain"
+                    onError={(error) => {
+                      console.warn('Full screen image error:', error);
+                    }}
                   />
-                )}
-              </TouchableOpacity>
-            </Animated.View>
-          </GestureDetector>
+                </TouchableOpacity>
+              </Animated.View>
+            </GestureDetector>
+          )}
 
           {/* Navigation Controls - Still available as backup */}
           {images.length > 1 && (
@@ -485,7 +605,7 @@ export default function CreateScreen() {
                     styles.indicator,
                     selectedImageIndex === index && styles.activeIndicator
                   ]}
-                  onPress={() => setSelectedImageIndex(index)}
+                  onPress={() => safeSetSelectedImageIndex(index)}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 />
               ))}
