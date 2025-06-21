@@ -9,6 +9,9 @@ import {
   Alert,
   Platform,
   Image,
+  Modal,
+  StatusBar,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -22,6 +25,8 @@ import {
   Pause,
   Trash2,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
@@ -30,6 +35,8 @@ import { AudioRecorder } from '@/components/AudioRecorder';
 import { noteService } from '@/services/noteService';
 import { Note } from '@/types/note';
 
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
 export default function CreateScreen() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -37,6 +44,10 @@ export default function CreateScreen() {
   const [audioRecordings, setAudioRecordings] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Image viewer states
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
+  const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
 
   const titleInputRef = useRef<TextInput>(null);
   const contentInputRef = useRef<TextInput>(null);
@@ -108,6 +119,31 @@ export default function CreateScreen() {
     setAudioRecordings(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Image viewer functions
+  const handleImagePress = (index: number) => {
+    setSelectedImageIndex(index);
+    setIsImageViewerVisible(true);
+  };
+
+  const closeImageViewer = () => {
+    setIsImageViewerVisible(false);
+    setSelectedImageIndex(0);
+  };
+
+  const goToPreviousImage = () => {
+    if (!images.length) return;
+    setSelectedImageIndex(prevIndex => 
+      prevIndex > 0 ? prevIndex - 1 : images.length - 1
+    );
+  };
+
+  const goToNextImage = () => {
+    if (!images.length) return;
+    setSelectedImageIndex(prevIndex => 
+      prevIndex < images.length - 1 ? prevIndex + 1 : 0
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -160,7 +196,12 @@ export default function CreateScreen() {
               >
                 {images.map((uri, index) => (
                   <View key={index} style={styles.imageWrapper}>
-                    <Image source={{ uri }} style={styles.imagePreview} />
+                    <TouchableOpacity
+                      onPress={() => handleImagePress(index)}
+                      activeOpacity={0.8}
+                    >
+                      <Image source={{ uri }} style={styles.imagePreview} />
+                    </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.removeImageButton}
                       onPress={() => removeImage(index)}
@@ -202,6 +243,85 @@ export default function CreateScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Full Screen Image Viewer Modal */}
+      {isImageViewerVisible && images.length > 0 && (
+        <Modal
+          visible={isImageViewerVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={closeImageViewer}
+          statusBarTranslucent={true}
+        >
+          <StatusBar hidden={true} />
+          <View style={styles.imageViewer}>
+            {/* Header Controls */}
+            <View style={styles.imageViewerHeader}>
+              <TouchableOpacity 
+                style={styles.closeButton} 
+                onPress={closeImageViewer}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <X size={28} color="#FFFFFF" />
+              </TouchableOpacity>
+              
+              <Text style={styles.imageCounter}>
+                {selectedImageIndex + 1} / {images.length}
+              </Text>
+            </View>
+
+            {/* Main Image Display */}
+            <TouchableOpacity 
+              style={styles.imageViewerContent}
+              activeOpacity={1}
+              onPress={closeImageViewer}
+            >
+              <Image 
+                source={{ uri: images[selectedImageIndex] }} 
+                style={styles.fullScreenImage}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+
+            {/* Navigation Controls - Only show if more than 1 image */}
+            {images.length > 1 && (
+              <>
+                <TouchableOpacity 
+                  style={[styles.navButton, styles.navButtonLeft]} 
+                  onPress={goToPreviousImage}
+                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                >
+                  <ChevronLeft size={32} color="#FFFFFF" />
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.navButton, styles.navButtonRight]} 
+                  onPress={goToNextImage}
+                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                >
+                  <ChevronRight size={32} color="#FFFFFF" />
+                </TouchableOpacity>
+              </>
+            )}
+
+            {/* Image Indicators */}
+            {images.length > 1 && (
+              <View style={styles.imageIndicators}>
+                {images.map((_, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.indicator,
+                      selectedImageIndex === index && styles.activeIndicator
+                    ]}
+                    onPress={() => setSelectedImageIndex(index)}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -334,5 +454,94 @@ const styles = StyleSheet.create({
   },
   removeAudioButton: {
     padding: 4,
+  },
+  // Image Viewer Styles
+  imageViewer: {
+    flex: 1,
+    backgroundColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 50,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    zIndex: 100,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  closeButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageCounter: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.7)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  imageViewerContent: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenImage: {
+    width: screenWidth,
+    height: screenHeight,
+    backgroundColor: 'transparent',
+  },
+  navButton: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -32,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 90,
+  },
+  navButtonLeft: {
+    left: 20,
+  },
+  navButtonRight: {
+    right: 20,
+  },
+  imageIndicators: {
+    position: 'absolute',
+    bottom: 40,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  indicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    marginHorizontal: 4,
+  },
+  activeIndicator: {
+    backgroundColor: '#FFFFFF',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
 });
