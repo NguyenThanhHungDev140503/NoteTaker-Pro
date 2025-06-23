@@ -11,10 +11,12 @@ import {
   Modal,
   StatusBar,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Star, Share, CreditCard as Edit3, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Star, Share, Edit3, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { Note } from '@/types/note';
 import { noteService } from '@/services/noteService';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
@@ -38,6 +40,7 @@ export default function NoteDetailScreen() {
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
   const [isGestureActive, setIsGestureActive] = useState(false);
+  const [isFavoriteLoading, setIsFavoriteLoading] = useState(false);
   
   // Component mounted ref (JS thread only)
   const isMountedRef = useRef(true);
@@ -192,16 +195,32 @@ export default function NoteDetailScreen() {
   };
 
   const handleToggleFavorite = async () => {
-    if (!note) return;
+    if (!note || isFavoriteLoading) return;
+    
+    setIsFavoriteLoading(true);
     
     try {
+      // Optimistic update for immediate UI feedback
+      const newFavoriteState = !note.isFavorite;
+      setNote(prev => prev ? { ...prev, isFavorite: newFavoriteState } : null);
+      
+      // Persist to storage
       await noteService.toggleFavorite(note.id);
-      if (isMountedRef.current) {
-        setNote(prev => prev ? { ...prev, isFavorite: !prev.isFavorite } : null);
+      
+      // Visual feedback
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
+      
     } catch (error) {
+      // Revert optimistic update on error
+      if (isMountedRef.current && note) {
+        setNote(prev => prev ? { ...prev, isFavorite: !newFavoriteState } : null);
+        Alert.alert('Error', 'Failed to update favorite status. Please try again.');
+      }
+    } finally {
       if (isMountedRef.current) {
-        Alert.alert('Error', 'Failed to update favorite status');
+        setIsFavoriteLoading(false);
       }
     }
   };
@@ -362,6 +381,7 @@ export default function NoteDetailScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
           <Text style={styles.loadingText}>Loading note...</Text>
         </View>
       </SafeAreaView>
@@ -390,12 +410,20 @@ export default function NoteDetailScreen() {
         </TouchableOpacity>
         
         <View style={styles.headerActions}>
-          <TouchableOpacity onPress={handleToggleFavorite} style={styles.headerAction}>
-            <Star
-              size={24}
-              color={note.isFavorite ? '#FFD700' : '#9CA3AF'}
-              fill={note.isFavorite ? '#FFD700' : 'transparent'}
-            />
+          <TouchableOpacity 
+            onPress={handleToggleFavorite} 
+            style={[styles.headerAction, isFavoriteLoading && styles.headerActionDisabled]}
+            disabled={isFavoriteLoading}
+          >
+            {isFavoriteLoading ? (
+              <ActivityIndicator size="small" color="#FFD700" />
+            ) : (
+              <Star
+                size={24}
+                color={note.isFavorite ? '#FFD700' : '#9CA3AF'}
+                fill={note.isFavorite ? '#FFD700' : 'transparent'}
+              />
+            )}
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.headerAction}>
@@ -605,6 +633,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     color: '#6B7280',
+    marginTop: 12,
   },
   errorContainer: {
     flex: 1,
@@ -641,6 +670,9 @@ const styles = StyleSheet.create({
   },
   headerAction: {
     marginLeft: 16,
+  },
+  headerActionDisabled: {
+    opacity: 0.6,
   },
   content: {
     flex: 1,

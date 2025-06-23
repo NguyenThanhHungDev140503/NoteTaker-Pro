@@ -80,15 +80,26 @@ class NoteService {
 
   async toggleFavorite(id: string): Promise<Note> {
     try {
-      const note = await this.getNoteById(id);
-      if (!note) {
+      const notes = await this.getAllNotes();
+      const noteIndex = notes.findIndex(note => note.id === id);
+      
+      if (noteIndex === -1) {
         throw new Error('Note not found');
       }
 
-      return await this.updateNote(id, { isFavorite: !note.isFavorite });
+      const updatedNote: Note = {
+        ...notes[noteIndex],
+        isFavorite: !notes[noteIndex].isFavorite,
+        updatedAt: new Date().toISOString(),
+      };
+
+      notes[noteIndex] = updatedNote;
+      await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+      
+      return updatedNote;
     } catch (error) {
       console.error('Failed to toggle favorite:', error);
-      throw error;
+      throw new Error('Unable to update favorite status. Please check your storage.');
     }
   }
 
