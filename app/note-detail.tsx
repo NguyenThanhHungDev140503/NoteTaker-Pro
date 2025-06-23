@@ -46,7 +46,7 @@ export default function NoteDetailScreen() {
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
   const [isGestureActive, setIsGestureActive] = useState(false);
   
-  // Edit mode state
+  // Edit mode state - FIXED: Ensure proper initialization
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState('');
   const [editedContent, setEditedContent] = useState('');
@@ -86,16 +86,34 @@ export default function NoteDetailScreen() {
     };
   }, []);
 
+  // FIXED: Enhanced note data initialization with proper edit state reset
   useEffect(() => {
     if (note) {
       setLoading(false);
+      
       // Initialize edit state with current note data
-      setEditedTitle(note.title);
-      setEditedContent(note.content);
+      setEditedTitle(note.title || '');
+      setEditedContent(note.content || '');
       setEditedImages([...note.images]);
       setEditedAudioRecordings([...note.audioRecordings]);
+      
+      // CRITICAL FIX: Ensure edit mode is always reset when note loads
+      if (isEditing) {
+        console.log('Resetting edit mode on note load');
+        setIsEditing(false);
+      }
     }
-  }, [note]);
+  }, [note?.id, note?.title, note?.content]); // Track specific properties for proper updates
+
+  // FIXED: Add debug effect to track edit state
+  useEffect(() => {
+    console.log('Edit state changed:', { 
+      isEditing, 
+      isSaving, 
+      noteId: note?.id,
+      hasNote: !!note 
+    });
+  }, [isEditing, isSaving, note?.id]);
   
   // Clean up animations function
   const resetAnimations = () => {
@@ -210,86 +228,6 @@ export default function NoteDetailScreen() {
     }
   };
 
-  const handleEditToggle = () => {
-    if (isEditing) {
-      // Cancel editing - Check if there are unsaved changes
-      const hasChanges = 
-        editedTitle !== note?.title ||
-        editedContent !== note?.content ||
-        JSON.stringify(editedImages) !== JSON.stringify(note?.images) ||
-        JSON.stringify(editedAudioRecordings) !== JSON.stringify(note?.audioRecordings);
-
-      if (hasChanges) {
-        Alert.alert(
-          'Discard Changes',
-          'You have unsaved changes. Are you sure you want to discard them?',
-          [
-            { text: 'Keep Editing', style: 'cancel' },
-            { 
-              text: 'Discard Changes', 
-              style: 'destructive',
-              onPress: () => {
-                // Reset edited data to original
-                if (note) {
-                  setEditedTitle(note.title);
-                  setEditedContent(note.content);
-                  setEditedImages([...note.images]);
-                  setEditedAudioRecordings([...note.audioRecordings]);
-                }
-                setIsEditing(false);
-              }
-            },
-          ]
-        );
-      } else {
-        // No changes, safe to exit
-        setIsEditing(false);
-      }
-    } else {
-      // Start editing
-      setIsEditing(true);
-      if (Platform.OS !== 'web') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
-    }
-  };
-
-  const handleSaveChanges = async () => {
-    if (!note || isSaving) return;
-
-    try {
-      setIsSaving(true);
-
-      const updates = {
-        title: editedTitle.trim() || 'Untitled Note',
-        content: editedContent.trim(),
-        images: editedImages,
-        audioRecordings: editedAudioRecordings,
-      };
-
-      await updateNote(updates);
-      
-      // Reset editing state first
-      setIsEditing(false);
-      
-      // Then provide feedback
-      if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-
-      // Use setTimeout to ensure state update completes before alert
-      setTimeout(() => {
-        Alert.alert('Success', 'Note updated successfully!');
-      }, 100);
-
-    } catch (error) {
-      console.error('Save error:', error);
-      Alert.alert('Error', 'Failed to save changes. Please try again.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('vi-VN', {
@@ -301,7 +239,116 @@ export default function NoteDetailScreen() {
     });
   };
 
-  // Safe image index validation
+  // FIXED: Enhanced edit toggle with better state management
+  const handleEditToggle = () => {
+    console.log('Edit toggle clicked, current state:', { isEditing, isSaving });
+    
+    if (isSaving) {
+      console.log('Cannot toggle edit mode while saving');
+      return;
+    }
+
+    if (isEditing) {
+      // Cancel editing - Check if there are unsaved changes
+      const hasChanges = 
+        editedTitle !== (note?.title || '') ||
+        editedContent !== (note?.content || '') ||
+        JSON.stringify(editedImages) !== JSON.stringify(note?.images || []) ||
+        JSON.stringify(editedAudioRecordings) !== JSON.stringify(note?.audioRecordings || []);
+
+      console.log('Has unsaved changes:', hasChanges);
+
+      if (hasChanges) {
+        Alert.alert(
+          'Discard Changes',
+          'You have unsaved changes. Are you sure you want to discard them?',
+          [
+            { text: 'Keep Editing', style: 'cancel' },
+            { 
+              text: 'Discard Changes', 
+              style: 'destructive',
+              onPress: () => {
+                console.log('Discarding changes and exiting edit mode');
+                // Reset edited data to original
+                if (note) {
+                  setEditedTitle(note.title || '');
+                  setEditedContent(note.content || '');
+                  setEditedImages([...note.images]);
+                  setEditedAudioRecordings([...note.audioRecordings]);
+                }
+                setIsEditing(false);
+              }
+            },
+          ]
+        );
+      } else {
+        // No changes, safe to exit
+        console.log('No changes, exiting edit mode');
+        setIsEditing(false);
+      }
+    } else {
+      // Start editing
+      console.log('Starting edit mode');
+      setIsEditing(true);
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    }
+  };
+
+  // FIXED: Enhanced save function with better state management
+  const handleSaveChanges = async () => {
+    if (!note || isSaving) {
+      console.log('Cannot save:', { hasNote: !!note, isSaving });
+      return;
+    }
+
+    console.log('Starting save process');
+
+    try {
+      setIsSaving(true);
+
+      const updates = {
+        title: editedTitle.trim() || 'Untitled Note',
+        content: editedContent.trim(),
+        images: editedImages,
+        audioRecordings: editedAudioRecordings,
+      };
+
+      console.log('Saving updates:', updates);
+      await updateNote(updates);
+      
+      console.log('Save successful, resetting edit state');
+      
+      // CRITICAL FIX: Reset editing state immediately after successful save
+      setIsEditing(false);
+      
+      // Then provide feedback
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      // Delayed alert to ensure state update completes
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          Alert.alert('Success', 'Note updated successfully!');
+        }
+      }, 150);
+
+    } catch (error) {
+      console.error('Save error:', error);
+      if (isMountedRef.current) {
+        Alert.alert('Error', 'Failed to save changes. Please try again.');
+      }
+    } finally {
+      console.log('Save process complete, resetting isSaving');
+      if (isMountedRef.current) {
+        setIsSaving(false);
+      }
+    }
+  };
+
+  // Safe index validation
   const safeSetSelectedImageIndex = (newIndex: number) => {
     if (!isMountedRef.current || !note?.images?.length) return;
     
@@ -496,8 +543,19 @@ export default function NoteDetailScreen() {
     );
   }
 
+  // DEBUGGING: Add visual indicator for edit state (remove in production)
+  const debugInfo = __DEV__ ? (
+    <View style={styles.debugContainer}>
+      <Text style={styles.debugText}>
+        Edit Mode: {isEditing ? 'ON' : 'OFF'} | Saving: {isSaving ? 'YES' : 'NO'}
+      </Text>
+    </View>
+  ) : null;
+
   return (
     <SafeAreaView style={styles.container}>
+      {debugInfo}
+      
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
@@ -525,6 +583,7 @@ export default function NoteDetailScreen() {
             <Share size={24} color="#9CA3AF" />
           </TouchableOpacity>
           
+          {/* FIXED: Enhanced edit button visibility with debug info */}
           {isEditing ? (
             <View style={styles.editActions}>
               <TouchableOpacity 
@@ -548,7 +607,11 @@ export default function NoteDetailScreen() {
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity style={styles.headerAction} onPress={handleEditToggle}>
+            <TouchableOpacity 
+              style={styles.headerAction} 
+              onPress={handleEditToggle}
+              testID="edit-button"
+            >
               <Edit3 size={24} color="#007AFF" />
             </TouchableOpacity>
           )}
@@ -796,6 +859,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  debugContainer: {
+    backgroundColor: '#FFF3CD',
+    padding: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFEAA7',
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#856404',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -841,6 +916,7 @@ const styles = StyleSheet.create({
   },
   headerAction: {
     marginLeft: 16,
+    padding: 4,
   },
   headerActionDisabled: {
     opacity: 0.6,
