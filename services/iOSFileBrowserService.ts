@@ -315,4 +315,4 @@ class iOSFileBrowserService {
   }
 }
 
-export const iOSFileBrowserService = new iOSFileBrowserService();
+export const iosFileBrowserService = new iOSFileBrowserService();
