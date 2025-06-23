@@ -12,14 +12,17 @@ import {
   StatusBar,
   Platform,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Star, Share, CreditCard as Edit3, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Star, Share, Edit3, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight, Save, XCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Note } from '@/types/note';
 import { useNote } from '@/contexts/NotesContext';
 import { AudioPlayer } from '@/components/AudioPlayer';
+import { MediaPicker } from '@/components/MediaPicker';
+import { AudioRecorder } from '@/components/AudioRecorder';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { 
   useSharedValue, 
@@ -36,12 +39,21 @@ const SWIPE_THRESHOLD = 50;
 
 export default function NoteDetailScreen() {
   const { noteId } = useLocalSearchParams<{ noteId: string }>();
-  const { note, toggleFavorite, isFavoriteLoading } = useNote(noteId || '');
+  const { note, updateNote, toggleFavorite, isFavoriteLoading } = useNote(noteId || '');
   
   const [loading, setLoading] = useState(!note);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
   const [isGestureActive, setIsGestureActive] = useState(false);
+  
+  // Edit mode state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedTitle, setEditedTitle] = useState('');
+  const [editedContent, setEditedContent] = useState('');
+  const [editedImages, setEditedImages] = useState<string[]>([]);
+  const [editedAudioRecordings, setEditedAudioRecordings] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   
   // Component mounted ref (JS thread only)
   const isMountedRef = useRef(true);
@@ -77,6 +89,11 @@ export default function NoteDetailScreen() {
   useEffect(() => {
     if (note) {
       setLoading(false);
+      // Initialize edit state with current note data
+      setEditedTitle(note.title);
+      setEditedContent(note.content);
+      setEditedImages([...note.images]);
+      setEditedAudioRecordings([...note.audioRecordings]);
     }
   }, [note]);
   
@@ -190,6 +207,67 @@ export default function NoteDetailScreen() {
       
     } catch (error) {
       // Error is already handled in the context
+    }
+  };
+
+  const handleEditToggle = () => {
+    if (isEditing) {
+      // Cancel editing
+      Alert.alert(
+        'Cancel Changes',
+        'Are you sure you want to cancel? Any unsaved changes will be lost.',
+        [
+          { text: 'Continue Editing', style: 'cancel' },
+          { 
+            text: 'Cancel Changes', 
+            style: 'destructive',
+            onPress: () => {
+              setIsEditing(false);
+              // Reset edited data to original
+              if (note) {
+                setEditedTitle(note.title);
+                setEditedContent(note.content);
+                setEditedImages([...note.images]);
+                setEditedAudioRecordings([...note.audioRecordings]);
+              }
+            }
+          },
+        ]
+      );
+    } else {
+      // Start editing
+      setIsEditing(true);
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    }
+  };
+
+  const handleSaveChanges = async () => {
+    if (!note || isSaving) return;
+
+    try {
+      setIsSaving(true);
+
+      const updates = {
+        title: editedTitle.trim() || 'Untitled Note',
+        content: editedContent.trim(),
+        images: editedImages,
+        audioRecordings: editedAudioRecordings,
+      };
+
+      await updateNote(updates);
+      setIsEditing(false);
+      
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      Alert.alert('Success', 'Note updated successfully!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save changes. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -323,6 +401,36 @@ export default function NoteDetailScreen() {
     }
   };
 
+  // Edit mode handlers
+  const handleImagePicked = (imageUri: string) => {
+    setEditedImages(prev => [...prev, imageUri]);
+  };
+
+  const handleAudioRecorded = (audioUri: string) => {
+    setEditedAudioRecordings(prev => [...prev, audioUri]);
+  };
+
+  const removeEditedImage = (index: number) => {
+    setEditedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeEditedAudio = (index: number) => {
+    setEditedAudioRecordings(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Audio delete handler based on mode
+  const handleDeleteAudio = (index: number) => {
+    if (isEditing) {
+      removeEditedAudio(index);
+    } else {
+      Alert.alert(
+        'Cannot Delete',
+        'Audio recordings cannot be deleted from the view mode. Please edit the note to remove recordings.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
   // Animated styles with error handling
   const animatedImageStyle = useAnimatedStyle(() => {
     try {
@@ -344,17 +452,6 @@ export default function NoteDetailScreen() {
       };
     }
   });
-
-  // Dummy function for audio deletion in note detail (read-only mode)
-  const handleDeleteAudio = (index: number) => {
-    // In note detail view, we don't allow deletion
-    // This could be extended to support editing mode in future
-    Alert.alert(
-      'Cannot Delete',
-      'Audio recordings cannot be deleted from the detail view. Please edit the note to remove recordings.',
-      [{ text: 'OK' }]
-    );
-  };
 
   if (loading) {
     return (
@@ -409,15 +506,50 @@ export default function NoteDetailScreen() {
             <Share size={24} color="#9CA3AF" />
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.headerAction}>
-            <Edit3 size={24} color="#9CA3AF" />
-          </TouchableOpacity>
+          {isEditing ? (
+            <View style={styles.editActions}>
+              <TouchableOpacity 
+                style={[styles.cancelButton, isSaving && styles.disabledButton]}
+                onPress={handleEditToggle}
+                disabled={isSaving}
+              >
+                <XCircle size={20} color="#FF3B30" />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.saveButton, isSaving && styles.disabledButton]}
+                onPress={handleSaveChanges}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Save size={20} color="#FFFFFF" />
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.headerAction} onPress={handleEditToggle}>
+              <Edit3 size={24} color="#007AFF" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Title */}
-        <Text style={styles.title}>{note.title || 'Untitled Note'}</Text>
+        {isEditing ? (
+          <TextInput
+            style={styles.titleInput}
+            value={editedTitle}
+            onChangeText={setEditedTitle}
+            placeholder="Note title..."
+            multiline
+            autoFocus={false}
+          />
+        ) : (
+          <Text style={styles.title}>{note.title || 'Untitled Note'}</Text>
+        )}
         
         {/* Date */}
         <View style={styles.dateContainer}>
@@ -433,47 +565,80 @@ export default function NoteDetailScreen() {
         )}
 
         {/* Content */}
-        <Text style={styles.noteContent}>{note.content}</Text>
+        {isEditing ? (
+          <TextInput
+            style={styles.contentInput}
+            value={editedContent}
+            onChangeText={setEditedContent}
+            placeholder="Start writing your note..."
+            multiline
+            textAlignVertical="top"
+          />
+        ) : (
+          <Text style={styles.noteContent}>{note.content}</Text>
+        )}
 
         {/* Images */}
-        {note.images.length > 0 && (
+        {(isEditing ? editedImages : note.images).length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Camera size={20} color="#007AFF" />
-              <Text style={styles.sectionTitle}>Images ({note.images.length})</Text>
+              <Text style={styles.sectionTitle}>
+                Images ({(isEditing ? editedImages : note.images).length})
+              </Text>
             </View>
             
             <View style={styles.imagesGrid}>
-              {note.images.map((uri, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.imageContainer}
-                  onPress={() => handleImagePress(index)}
-                  activeOpacity={0.8}
-                >
-                  <Image 
-                    source={{ uri }} 
-                    style={styles.image} 
-                    resizeMode="cover"
-                  />
-                  <View style={styles.imageOverlay}>
-                    <Text style={styles.imageNumber}>{index + 1}</Text>
-                  </View>
-                </TouchableOpacity>
+              {(isEditing ? editedImages : note.images).map((uri, index) => (
+                <View key={index} style={styles.imageContainer}>
+                  <TouchableOpacity
+                    style={styles.imageButton}
+                    onPress={() => handleImagePress(index)}
+                    activeOpacity={0.8}
+                  >
+                    <Image 
+                      source={{ uri }} 
+                      style={styles.image} 
+                      resizeMode="cover"
+                    />
+                    <View style={styles.imageOverlay}>
+                      <Text style={styles.imageNumber}>{index + 1}</Text>
+                    </View>
+                  </TouchableOpacity>
+                  
+                  {isEditing && (
+                    <TouchableOpacity
+                      style={styles.removeImageButton}
+                      onPress={() => removeEditedImage(index)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <X size={16} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  )}
+                </View>
               ))}
             </View>
           </View>
         )}
 
+        {/* Add Image in Edit Mode */}
+        {isEditing && (
+          <View style={styles.section}>
+            <MediaPicker onImagePicked={handleImagePicked} />
+          </View>
+        )}
+
         {/* Audio Recordings with Enhanced Player */}
-        {note.audioRecordings.length > 0 && (
+        {(isEditing ? editedAudioRecordings : note.audioRecordings).length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Mic size={20} color="#007AFF" />
-              <Text style={styles.sectionTitle}>Audio Recordings ({note.audioRecordings.length})</Text>
+              <Text style={styles.sectionTitle}>
+                Audio Recordings ({(isEditing ? editedAudioRecordings : note.audioRecordings).length})
+              </Text>
             </View>
             
-            {note.audioRecordings.map((uri, index) => (
+            {(isEditing ? editedAudioRecordings : note.audioRecordings).map((uri, index) => (
               <AudioPlayer
                 key={`${uri}-${index}`}
                 uri={uri}
@@ -481,6 +646,17 @@ export default function NoteDetailScreen() {
                 onDelete={handleDeleteAudio}
               />
             ))}
+          </View>
+        )}
+
+        {/* Add Audio in Edit Mode */}
+        {isEditing && (
+          <View style={styles.section}>
+            <AudioRecorder
+              onAudioRecorded={handleAudioRecorded}
+              isRecording={isRecording}
+              onRecordingStateChange={setIsRecording}
+            />
           </View>
         )}
 
@@ -650,6 +826,26 @@ const styles = StyleSheet.create({
   headerActionDisabled: {
     opacity: 0.6,
   },
+  editActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 16,
+  },
+  cancelButton: {
+    padding: 8,
+    marginRight: 8,
+  },
+  saveButton: {
+    backgroundColor: '#34C759',
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
   content: {
     flex: 1,
     padding: 20,
@@ -660,6 +856,18 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     marginBottom: 16,
     lineHeight: 36,
+  },
+  titleInput: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 16,
+    lineHeight: 36,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#F9FAFB',
   },
   dateContainer: {
     flexDirection: 'row',
@@ -677,6 +885,20 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginTop: 20,
     marginBottom: 32,
+  },
+  contentInput: {
+    fontSize: 16,
+    color: '#374151',
+    lineHeight: 24,
+    marginTop: 20,
+    marginBottom: 32,
+    minHeight: 200,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#F9FAFB',
+    textAlignVertical: 'top',
   },
   section: {
     marginBottom: 32,
@@ -703,6 +925,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     position: 'relative',
   },
+  imageButton: {
+    position: 'relative',
+  },
   image: {
     width: '100%',
     height: 150,
@@ -722,6 +947,25 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: '#FF3B30',
+    borderRadius: 14,
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   tagsContainer: {
     flexDirection: 'row',
