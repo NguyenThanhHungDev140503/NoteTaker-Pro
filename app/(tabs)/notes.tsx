@@ -8,7 +8,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Grid, List, Filter, Plus } from 'lucide-react-native';
+import { Grid2x2 as Grid, List, Filter, Plus } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { NoteCard } from '@/components/NoteCard';
 import { SearchBar } from '@/components/SearchBar';
