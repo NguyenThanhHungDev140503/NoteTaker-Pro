@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Star, Share, Edit3, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight, Save, XCircle } from 'lucide-react-native';
+import { ArrowLeft, Star, Share, CreditCard as Edit3, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight, Save, Circle as XCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Note } from '@/types/note';
 import { useNote } from '@/contexts/NotesContext';
