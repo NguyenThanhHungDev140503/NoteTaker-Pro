@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Play, Pause, SkipBack, SkipForward, Volume2, Trash2 } from 'lucide-react-native';
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import Animated, { 
   useSharedValue, 
@@ -37,6 +38,7 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
   const isProcessingRef = useRef(false);
   const isMountedRef = useRef(true);
   const currentUriRef = useRef<string>('');
+  const blobUrlRef = useRef<string | null>(null);
 
   // 🔧 FIX: Auto-load audio when component mounts or URI changes
   useEffect(() => {
@@ -53,13 +55,20 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
     };
   }, [uri]);
 
-  // 🔧 FIX: Proper cleanup and state reset
+  // 🔧 FIX: Proper cleanup and state reset with blob URL cleanup
   const cleanupAudio = async () => {
     try {
       if (soundRef.current) {
         await soundRef.current.unloadAsync();
         soundRef.current = null;
       }
+      
+      // Clean up blob URL if it exists (web platform)
+      if (blobUrlRef.current && Platform.OS === 'web') {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+      
       if (isMountedRef.current) {
         setSound(null);
         setIsLoaded(false);
@@ -93,7 +102,43 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  // 🔧 FIX: Improved audio loading with better error handling
+  // 🔧 FIX: Create blob URL for web platform
+  const createWebCompatibleUri = async (originalUri: string): Promise<string> => {
+    if (Platform.OS !== 'web') {
+      return originalUri;
+    }
+
+    try {
+      console.log('Converting URI for web platform:', originalUri);
+      
+      // Read the audio file as base64
+      const base64Data = await FileSystem.readAsStringAsync(originalUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      
+      // Convert base64 to binary data
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      // Create blob with appropriate MIME type
+      const blob = new Blob([bytes], { type: 'audio/m4a' });
+      
+      // Create object URL
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrlRef.current = blobUrl;
+      
+      console.log('Created blob URL for web:', blobUrl);
+      return blobUrl;
+    } catch (error) {
+      console.error('Error creating web-compatible URI:', error);
+      throw error;
+    }
+  };
+
+  // 🔧 FIX: Improved audio loading with web platform support
   const loadAudio = async () => {
     if (isProcessingRef.current || !isMountedRef.current || !uri) return;
     
@@ -116,9 +161,12 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
         playThroughEarpieceAndroid: false,
       });
 
+      // Get the appropriate URI for the platform
+      const audioUri = await createWebCompatibleUri(uri);
+
       // Load the sound
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri },
+        { uri: audioUri },
         { 
           shouldPlay: false,
           progressUpdateIntervalMillis: 100,
@@ -396,7 +444,9 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
         <Text style={styles.debugText}>
           URI: {uri ? 'Valid' : 'Missing'} | 
           Loaded: {isLoaded ? 'Yes' : 'No'} | 
-          Error: {hasError ? 'Yes' : 'No'}
+          Error: {hasError ? 'Yes' : 'No'} |
+          Platform: {Platform.OS} |
+          BlobURL: {blobUrlRef.current ? 'Created' : 'None'}
         </Text>
       )}
     </View>
