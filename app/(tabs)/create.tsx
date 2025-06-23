@@ -16,11 +16,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Save, Camera, Image as ImageIcon, Mic, MicOff, Play, Pause, Trash2, X, ChevronLeft, ChevronRight, CircleCheck as CheckCircle } from 'lucide-react-native';
+import { Save, Camera, Image as ImageIcon, Mic, MicOff, Play, Pause, Trash2, X, ChevronLeft, ChevronRight, CircleCheck as CheckCircle, Home } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { MediaPicker } from '@/components/MediaPicker';
 import { AudioRecorder } from '@/components/AudioRecorder';
+import { AudioPlayer } from '@/components/AudioPlayer';
 import { useNotes } from '@/contexts/NotesContext';
 import { Note } from '@/types/note';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
@@ -367,6 +368,14 @@ export default function CreateScreen() {
     setAudioRecordings(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Navigation functions
+  const handleGoHome = () => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    router.push('/(tabs)');
+  };
+
   // Enhanced image viewer functions
   const handleImagePress = (index: number) => {
     console.log('Image pressed:', index, 'URI:', images[index]);
@@ -486,11 +495,22 @@ export default function CreateScreen() {
       )}
 
       <View style={styles.header}>
+        {/* Home Button */}
+        <TouchableOpacity
+          style={styles.homeButton}
+          onPress={handleGoHome}
+          activeOpacity={0.7}
+        >
+          <Home size={24} color="#007AFF" />
+        </TouchableOpacity>
+
         <Text style={styles.headerTitle}>Create Note</Text>
+        
         <TouchableOpacity
           style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
           onPress={handleSave}
           disabled={isSaving}
+          activeOpacity={0.8}
         >
           {isSaving ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
@@ -590,20 +610,12 @@ export default function CreateScreen() {
             <View style={styles.audioContainer}>
               <Text style={styles.mediaLabel}>Audio Recordings ({audioRecordings.length})</Text>
               {audioRecordings.map((uri, index) => (
-                <View key={index} style={styles.audioItem}>
-                  <View style={styles.audioInfo}>
-                    <Mic size={16} color="#007AFF" />
-                    <Text style={styles.audioText}>
-                      Audio Recording {index + 1}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.removeAudioButton}
-                    onPress={() => removeAudio(index)}
-                  >
-                    <Trash2 size={16} color="#FF3B30" />
-                  </TouchableOpacity>
-                </View>
+                <AudioPlayer
+                  key={`${uri}-${index}`}
+                  uri={uri}
+                  index={index}
+                  onDelete={removeAudio}
+                />
               ))}
             </View>
           )}
@@ -754,10 +766,23 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
+  homeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F0F9FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#B3E5FC',
+  },
   headerTitle: {
     fontSize: 20,
     fontWeight: '600',
     color: '#1F2937',
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: 16,
   },
   saveButton: {
     flexDirection: 'row',
@@ -766,6 +791,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
   },
   saveButtonDisabled: {
     opacity: 0.6,
@@ -880,28 +913,6 @@ const styles = StyleSheet.create({
   },
   audioContainer: {
     marginTop: 16,
-  },
-  audioItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  audioInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  audioText: {
-    fontSize: 14,
-    color: '#374151',
-    marginLeft: 8,
-  },
-  removeAudioButton: {
-    padding: 4,
   },
   // Enhanced Image Viewer Styles
   imageViewer: {
