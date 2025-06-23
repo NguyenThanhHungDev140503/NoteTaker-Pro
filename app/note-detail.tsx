@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Alert,
   Modal,
   StatusBar,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -24,6 +25,7 @@ import Animated, {
   runOnJS,
   withTiming,
   interpolate,
+  cancelAnimation,
 } from 'react-native-reanimated';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -36,48 +38,132 @@ export default function NoteDetailScreen() {
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
   const [isGestureActive, setIsGestureActive] = useState(false);
-
-  // Animated values for gesture
+  
+  // Component mounted ref (JS thread only)
+  const isMountedRef = useRef(true);
+  
+  // Use shared values for all animation/gesture state
   const translateX = useSharedValue(0);
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
+  const isAnimating = useSharedValue(false);
+  const gestureActive = useSharedValue(false);
+
+  // Component cleanup
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      
+      // Reset StatusBar when component unmounts
+      if (Platform.OS === 'ios' || Platform.OS === 'android') {
+        StatusBar.setHidden(false);
+      }
+      
+      // Cancel any running animations
+      try {
+        cancelAnimation(translateX);
+        cancelAnimation(scale);
+        cancelAnimation(opacity);
+      } catch (error) {
+        console.warn('Animation cleanup error:', error);
+      }
+    };
+  }, []);
+  
+  // Clean up animations function
+  const resetAnimations = () => {
+    if (!isMountedRef.current) return;
+    
+    try {
+      cancelAnimation(translateX);
+      cancelAnimation(scale);
+      cancelAnimation(opacity);
+      
+      translateX.value = 0;
+      scale.value = 1;
+      opacity.value = 1;
+      isAnimating.value = false;
+      gestureActive.value = false;
+    } catch (error) {
+      console.warn('Reset animations error:', error);
+    }
+  };
 
   // Gesture handlers
   const panGesture = Gesture.Pan()
     .onStart(() => {
+      'worklet';
+      if (isAnimating.value) return;
+      
+      gestureActive.value = true;
       runOnJS(setIsGestureActive)(true);
     })
     .onUpdate((event) => {
-      // Only handle horizontal swipes
-      if (Math.abs(event.translationY) > Math.abs(event.translationX)) {
+      'worklet';
+      if (isAnimating.value || !event || !note?.images?.length || note.images.length <= 1) return;
+      
+      try {
+        // Only handle horizontal swipes
+        if (Math.abs(event.translationY) > Math.abs(event.translationX)) {
+          return;
+        }
+        
+        // Limit translation to prevent extreme values
+        const limitedTranslationX = Math.max(-screenWidth, Math.min(screenWidth, event.translationX));
+        translateX.value = limitedTranslationX;
+        
+        // Add subtle scale effect during swipe
+        const progress = Math.abs(limitedTranslationX) / screenWidth;
+        scale.value = interpolate(progress, [0, 0.5], [1, 0.95], 'clamp');
+        opacity.value = interpolate(progress, [0, 0.3], [1, 0.8], 'clamp');
+      } catch (error) {
+        // Just reset on any error
+        translateX.value = 0;
+        scale.value = 1;
+        opacity.value = 1;
+      }
+    })
+    .onEnd((event) => {
+      'worklet';
+      if (isAnimating.value || !note?.images?.length || note.images.length <= 1) {
+        gestureActive.value = false;
+        runOnJS(setIsGestureActive)(false);
         return;
       }
       
-      translateX.value = event.translationX;
-      
-      // Add subtle scale effect during swipe
-      const progress = Math.abs(event.translationX) / screenWidth;
-      scale.value = interpolate(progress, [0, 0.5], [1, 0.95], 'clamp');
-      opacity.value = interpolate(progress, [0, 0.3], [1, 0.8], 'clamp');
-    })
-    .onEnd((event) => {
-      const shouldNavigate = Math.abs(event.translationX) > SWIPE_THRESHOLD;
-      
-      if (shouldNavigate && note && note.images.length > 1) {
-        if (event.translationX > 0) {
-          // Swipe right - go to previous image
-          runOnJS(goToPreviousImageWithAnimation)();
+      try {
+        const shouldNavigate = Math.abs(event.translationX) > SWIPE_THRESHOLD;
+        
+        if (shouldNavigate) {
+          isAnimating.value = true;
+          if (event.translationX > 0) {
+            // Swipe right - go to previous image
+            runOnJS(handlePreviousImage)();
+          } else {
+            // Swipe left - go to next image
+            runOnJS(handleNextImage)();
+          }
         } else {
-          // Swipe left - go to next image
-          runOnJS(goToNextImageWithAnimation)();
+          // Return to original position
+          translateX.value = withSpring(0);
+          scale.value = withSpring(1);
+          opacity.value = withSpring(1);
         }
-      } else {
-        // Return to original position
-        translateX.value = withSpring(0);
-        scale.value = withSpring(1);
-        opacity.value = withSpring(1);
+      } catch (error) {
+        console.warn('Gesture end error:', error);
+        // Reset on error
+        translateX.value = 0;
+        scale.value = 1;
+        opacity.value = 1;
       }
       
+      gestureActive.value = false;
+      runOnJS(setIsGestureActive)(false);
+    })
+    .onFinalize(() => {
+      'worklet';
+      // Always reset gesture state
+      gestureActive.value = false;
       runOnJS(setIsGestureActive)(false);
     });
 
@@ -90,12 +176,18 @@ export default function NoteDetailScreen() {
     
     try {
       const noteData = await noteService.getNoteById(noteId);
-      setNote(noteData);
+      if (isMountedRef.current) {
+        setNote(noteData);
+      }
     } catch (error) {
-      Alert.alert('Error', 'Failed to load note');
-      router.back();
+      if (isMountedRef.current) {
+        Alert.alert('Error', 'Failed to load note');
+        router.back();
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -104,9 +196,13 @@ export default function NoteDetailScreen() {
     
     try {
       await noteService.toggleFavorite(note.id);
-      setNote(prev => prev ? { ...prev, isFavorite: !prev.isFavorite } : null);
+      if (isMountedRef.current) {
+        setNote(prev => prev ? { ...prev, isFavorite: !prev.isFavorite } : null);
+      }
     } catch (error) {
-      Alert.alert('Error', 'Failed to update favorite status');
+      if (isMountedRef.current) {
+        Alert.alert('Error', 'Failed to update favorite status');
+      }
     }
   };
 
@@ -121,78 +217,146 @@ export default function NoteDetailScreen() {
     });
   };
 
+  // Safe image index validation
+  const safeSetSelectedImageIndex = (newIndex: number) => {
+    if (!isMountedRef.current || !note?.images?.length) return;
+    
+    const safeIndex = Math.max(0, Math.min(newIndex, note.images.length - 1));
+    setSelectedImageIndex(safeIndex);
+  };
+
   const handleImagePress = (index: number) => {
-    setSelectedImageIndex(index);
+    if (!isMountedRef.current || !note?.images?.length || index < 0 || index >= note.images.length) {
+      console.warn('Invalid image index:', index);
+      return;
+    }
+    
+    safeSetSelectedImageIndex(index);
     setIsImageViewerVisible(true);
     
+    // Hide status bar
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      StatusBar.setHidden(true);
+    }
+    
     // Reset animation values
-    translateX.value = 0;
-    scale.value = 1;
-    opacity.value = 1;
+    resetAnimations();
   };
 
   const closeImageViewer = () => {
+    if (!isMountedRef.current || gestureActive.value) return; // Don't close during gesture
+    
     setIsImageViewerVisible(false);
-    setSelectedImageIndex(0);
+    
+    // Restore status bar
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      StatusBar.setHidden(false);
+    }
     
     // Reset animation values
-    translateX.value = 0;
-    scale.value = 1;
-    opacity.value = 1;
+    resetAnimations();
   };
 
   const goToPreviousImage = () => {
-    if (!note?.images.length) return;
-    setSelectedImageIndex(prevIndex => 
-      prevIndex > 0 ? prevIndex - 1 : note.images.length - 1
+    if (!isMountedRef.current || !note?.images?.length) return;
+    safeSetSelectedImageIndex(
+      selectedImageIndex > 0 ? selectedImageIndex - 1 : note.images.length - 1
     );
   };
 
   const goToNextImage = () => {
-    if (!note?.images.length) return;
-    setSelectedImageIndex(prevIndex => 
-      prevIndex < note.images.length - 1 ? prevIndex + 1 : 0
+    if (!isMountedRef.current || !note?.images?.length) return;
+    safeSetSelectedImageIndex(
+      selectedImageIndex < note.images.length - 1 ? selectedImageIndex + 1 : 0
     );
   };
 
-  const goToPreviousImageWithAnimation = () => {
-    if (!note?.images.length) return;
+  // Safer animation functions without complex callbacks
+  const handlePreviousImage = () => {
+    if (!isMountedRef.current || !note?.images?.length) return;
     
-    // Animate slide effect
-    translateX.value = withTiming(screenWidth, { duration: 200 }, () => {
-      runOnJS(setSelectedImageIndex)(prevIndex => 
-        prevIndex > 0 ? prevIndex - 1 : note.images.length - 1
-      );
-      translateX.value = -screenWidth;
-      translateX.value = withSpring(0);
-      scale.value = withSpring(1);
-      opacity.value = withSpring(1);
-    });
+    // Update index directly first
+    goToPreviousImage();
+    
+    // Then animate with simple spring
+    try {
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          translateX.value = screenWidth;
+          translateX.value = withSpring(0, {
+            damping: 20,
+            stiffness: 90
+          });
+          scale.value = withSpring(1);
+          opacity.value = withSpring(1);
+          
+          // Reset animation flag after animation completes
+          setTimeout(() => {
+            if (isMountedRef.current) {
+              isAnimating.value = false;
+            }
+          }, 300);
+        }
+      }, 50);
+    } catch (error) {
+      console.warn('Animation error:', error);
+      isAnimating.value = false;
+    }
   };
 
-  const goToNextImageWithAnimation = () => {
-    if (!note?.images.length) return;
+  const handleNextImage = () => {
+    if (!isMountedRef.current || !note?.images?.length) return;
     
-    // Animate slide effect
-    translateX.value = withTiming(-screenWidth, { duration: 200 }, () => {
-      runOnJS(setSelectedImageIndex)(prevIndex => 
-        prevIndex < note.images.length - 1 ? prevIndex + 1 : 0
-      );
-      translateX.value = screenWidth;
-      translateX.value = withSpring(0);
-      scale.value = withSpring(1);
-      opacity.value = withSpring(1);
-    });
+    // Update index directly first
+    goToNextImage();
+    
+    // Then animate with simple spring
+    try {
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          translateX.value = -screenWidth;
+          translateX.value = withSpring(0, {
+            damping: 20,
+            stiffness: 90
+          });
+          scale.value = withSpring(1);
+          opacity.value = withSpring(1);
+          
+          // Reset animation flag after animation completes
+          setTimeout(() => {
+            if (isMountedRef.current) {
+              isAnimating.value = false;
+            }
+          }, 300);
+        }
+      }, 50);
+    } catch (error) {
+      console.warn('Animation error:', error);
+      isAnimating.value = false;
+    }
   };
 
-  // Animated styles
-  const animatedImageStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { scale: scale.value }
-    ],
-    opacity: opacity.value,
-  }));
+  // Animated styles with error handling
+  const animatedImageStyle = useAnimatedStyle(() => {
+    try {
+      return {
+        transform: [
+          { translateX: translateX.value || 0 },
+          { scale: scale.value || 1 }
+        ],
+        opacity: opacity.value || 1,
+      };
+    } catch (error) {
+      // Silent error but return safe defaults
+      return {
+        transform: [
+          { translateX: 0 },
+          { scale: 1 }
+        ],
+        opacity: 1,
+      };
+    }
+  });
 
   if (loading) {
     return (
@@ -332,13 +496,14 @@ export default function NoteDetailScreen() {
       </ScrollView>
 
       {/* Full Screen Image Viewer Modal with Swipe Gesture */}
-      {isImageViewerVisible && (
+      {isImageViewerVisible && note?.images && note.images.length > 0 && selectedImageIndex >= 0 && selectedImageIndex < note.images.length && (
         <Modal
           visible={isImageViewerVisible}
           transparent={true}
           animationType="fade"
           onRequestClose={closeImageViewer}
           statusBarTranslucent={true}
+          onDismiss={resetAnimations}
         >
           <StatusBar hidden={true} />
           <View style={styles.imageViewer}>
@@ -348,6 +513,7 @@ export default function NoteDetailScreen() {
                 style={styles.closeButton} 
                 onPress={closeImageViewer}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                disabled={isGestureActive}
               >
                 <X size={28} color="#FFFFFF" />
               </TouchableOpacity>
@@ -374,26 +540,29 @@ export default function NoteDetailScreen() {
                     source={{ uri: note.images[selectedImageIndex] }} 
                     style={styles.fullScreenImage}
                     resizeMode="contain"
+                    onError={(error) => console.warn('Image load error:', error.nativeEvent?.error || 'Unknown error')}
                   />
                 </TouchableOpacity>
               </Animated.View>
             </GestureDetector>
 
             {/* Navigation Controls - Still available as backup */}
-            {note.images.length > 1 && (
+            {note.images.length > 1 && !isGestureActive && (
               <>
                 <TouchableOpacity 
                   style={[styles.navButton, styles.navButtonLeft]} 
-                  onPress={goToPreviousImage}
+                  onPress={handlePreviousImage}
                   hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                  disabled={isGestureActive}
                 >
                   <ChevronLeft size={32} color="#FFFFFF" />
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
                   style={[styles.navButton, styles.navButtonRight]} 
-                  onPress={goToNextImage}
+                  onPress={handleNextImage}
                   hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                  disabled={isGestureActive}
                 >
                   <ChevronRight size={32} color="#FFFFFF" />
                 </TouchableOpacity>
@@ -410,7 +579,8 @@ export default function NoteDetailScreen() {
                       styles.indicator,
                       selectedImageIndex === index && styles.activeIndicator
                     ]}
-                    onPress={() => setSelectedImageIndex(index)}
+                    onPress={() => !isGestureActive && safeSetSelectedImageIndex(index)}
+                    disabled={isGestureActive}
                   />
                 ))}
               </View>
@@ -599,7 +769,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 50,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
     paddingHorizontal: 20,
     paddingBottom: 20,
     zIndex: 100,

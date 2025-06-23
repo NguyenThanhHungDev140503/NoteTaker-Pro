@@ -24,7 +24,7 @@ export function AudioRecorder({
 }: AudioRecorderProps) {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
-  const durationInterval = useRef<NodeJS.Timeout | null>(null);
+  const durationInterval = useRef<number | null>(null);
 
   const requestPermissions = async () => {
     try {
