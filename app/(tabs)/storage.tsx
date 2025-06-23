@@ -10,17 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  HardDrive,
-  Folder,
-  Smartphone,
-  Cloud,
-  CheckCircle,
-  AlertTriangle,
-  RefreshCw,
-  FolderOpen,
-  Info,
-} from 'lucide-react-native';
+import { HardDrive, Folder, Smartphone, Cloud, CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, RefreshCw, FolderOpen, Info } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { storageLocationService } from '@/services/storageLocationService';
