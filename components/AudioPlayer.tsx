@@ -36,31 +36,38 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
   const soundRef = useRef<Audio.Sound | null>(null);
   const isProcessingRef = useRef(false);
   const isMountedRef = useRef(true);
+  const currentUriRef = useRef<string>('');
 
-  // Cleanup on unmount
+  // 🔧 FIX: Auto-load audio when component mounts or URI changes
   useEffect(() => {
     isMountedRef.current = true;
+    
+    if (uri && uri !== currentUriRef.current) {
+      currentUriRef.current = uri;
+      loadAudio();
+    }
     
     return () => {
       isMountedRef.current = false;
       cleanupAudio();
     };
-  }, []);
-
-  // URI change detection
-  useEffect(() => {
-    if (uri && uri !== soundRef.current?.getURI) {
-      resetAudioState();
-    }
   }, [uri]);
 
+  // 🔧 FIX: Proper cleanup and state reset
   const cleanupAudio = async () => {
     try {
       if (soundRef.current) {
         await soundRef.current.unloadAsync();
         soundRef.current = null;
       }
-      setSound(null);
+      if (isMountedRef.current) {
+        setSound(null);
+        setIsLoaded(false);
+        setIsPlaying(false);
+        setPosition(0);
+        setDuration(0);
+        progressValue.value = 0;
+      }
     } catch (error) {
       console.warn('Audio cleanup error:', error);
     }
@@ -86,15 +93,18 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  // 🔧 FIX: Improved audio loading with better error handling
   const loadAudio = async () => {
-    if (isProcessingRef.current || !isMountedRef.current) return;
+    if (isProcessingRef.current || !isMountedRef.current || !uri) return;
     
     try {
       isProcessingRef.current = true;
       setIsLoading(true);
       setHasError(false);
       
-      // Cleanup existing sound
+      console.log('Loading audio:', uri);
+      
+      // Cleanup existing sound first
       await cleanupAudio();
 
       // Configure audio mode
@@ -106,7 +116,7 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
         playThroughEarpieceAndroid: false,
       });
 
-      // Load the sound with proper error handling
+      // Load the sound
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri },
         { 
@@ -125,6 +135,8 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
       setSound(newSound);
       soundRef.current = newSound;
       setIsLoaded(true);
+      
+      console.log('Audio loaded successfully');
 
     } catch (error) {
       console.error('Error loading audio:', error);
@@ -140,6 +152,7 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
     }
   };
 
+  // 🔧 FIX: Enhanced playback status handling
   const onPlaybackStatusUpdate = (status: any) => {
     if (!isMountedRef.current) return;
     
@@ -150,7 +163,6 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
       const currentPosition = status.positionMillis || 0;
       const currentPlaying = status.isPlaying || false;
 
-      // Update states safely
       setDuration(currentDuration);
       setPosition(currentPosition);
       setIsPlaying(currentPlaying);
@@ -174,19 +186,17 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
     }
   };
 
+  // 🔧 FIX: Improved audio end handling
   const handleAudioEnded = () => {
     if (!isMountedRef.current) return;
     
     console.log('Audio ended, resetting...');
     
-    // Reset playback state
     setIsPlaying(false);
     setPosition(0);
-    
-    // Reset progress bar to beginning with animation
     progressValue.value = withTiming(0, { duration: 300 });
     
-    // Reset audio position to beginning for next play
+    // Reset audio position for next play
     if (soundRef.current) {
       soundRef.current.setPositionAsync(0).catch(error => {
         console.warn('Error resetting audio position:', error);
@@ -194,17 +204,26 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
     }
   };
 
+  // 🔧 FIX: Simplified and more reliable play/pause
   const handlePlayPause = async () => {
-    // Prevent multiple rapid clicks
     if (isProcessingRef.current || !isMountedRef.current) return;
     
     try {
       isProcessingRef.current = true;
 
-      // Load audio if not loaded
+      // If not loaded, try to load first
       if (!isLoaded || !soundRef.current) {
+        console.log('Audio not loaded, loading now...');
         await loadAudio();
-        if (!isLoaded || !soundRef.current) return;
+        
+        // Wait a bit for loading to complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        if (!isLoaded || !soundRef.current) {
+          console.error('Failed to load audio');
+          setHasError(true);
+          return;
+        }
       }
 
       // Add haptic feedback
@@ -215,14 +234,16 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
       const currentStatus = playbackStatusRef.current;
       
       if (isPlaying) {
-        // Pause audio
+        console.log('Pausing audio...');
         await soundRef.current.pauseAsync();
       } else {
-        // Play audio
+        console.log('Playing audio...');
+        
+        // If at end, restart from beginning
         if (currentStatus?.positionMillis >= currentStatus?.durationMillis) {
-          // If at end, restart from beginning
           await soundRef.current.setPositionAsync(0);
         }
+        
         await soundRef.current.playAsync();
       }
     } catch (error) {
@@ -232,10 +253,9 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
         resetAudioState();
       }
     } finally {
-      // Small delay to prevent rapid clicking
       setTimeout(() => {
         isProcessingRef.current = false;
-      }, 200);
+      }, 300);
     }
   };
 
@@ -295,6 +315,9 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
           {hasError && (
             <Text style={styles.errorText}>(Error loading)</Text>
           )}
+          {isLoading && (
+            <Text style={styles.loadingText}>(Loading...)</Text>
+          )}
         </View>
         <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
           <Trash2 size={16} color="#FF3B30" />
@@ -307,9 +330,8 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
           style={styles.progressBarTouch}
           onPress={(event) => {
             if (isLoaded && duration > 0) {
-              const { locationX, target } = event.nativeEvent;
-              // Get actual width of progress bar
-              const progressBarWidth = 250; // Approximate width, could be measured
+              const { locationX } = event.nativeEvent;
+              const progressBarWidth = 250;
               const progress = Math.max(0, Math.min(1, locationX / progressBarWidth));
               handleSeek(progress);
             }
@@ -345,13 +367,12 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
           style={[
             styles.playButton, 
             (isLoading || hasError) && styles.playButtonDisabled,
-            isProcessingRef.current && styles.playButtonProcessing
           ]}
           onPress={handlePlayPause}
           disabled={isLoading || hasError}
         >
           {isLoading ? (
-            <View style={styles.loadingDot} />
+            <Text style={styles.loadingIcon}>⏳</Text>
           ) : hasError ? (
             <Text style={styles.errorIcon}>⚠</Text>
           ) : isPlaying ? (
@@ -369,6 +390,15 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
           <SkipForward size={20} color={!isLoaded || isLoading ? '#9CA3AF' : '#007AFF'} />
         </TouchableOpacity>
       </View>
+      
+      {/* Debug Info (remove in production) */}
+      {__DEV__ && (
+        <Text style={styles.debugText}>
+          URI: {uri ? 'Valid' : 'Missing'} | 
+          Loaded: {isLoaded ? 'Yes' : 'No'} | 
+          Error: {hasError ? 'Yes' : 'No'}
+        </Text>
+      )}
     </View>
   );
 }
@@ -402,6 +432,12 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 12,
     color: '#EF4444',
+    marginLeft: 8,
+    fontStyle: 'italic',
+  },
+  loadingText: {
+    fontSize: 12,
+    color: '#007AFF',
     marginLeft: 8,
     fontStyle: 'italic',
   },
@@ -474,18 +510,18 @@ const styles = StyleSheet.create({
   playButtonDisabled: {
     backgroundColor: '#9CA3AF',
   },
-  playButtonProcessing: {
-    opacity: 0.7,
-  },
-  loadingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FFFFFF',
-    opacity: 0.8,
+  loadingIcon: {
+    color: '#FFFFFF',
+    fontSize: 16,
   },
   errorIcon: {
     color: '#FFFFFF',
     fontSize: 16,
+  },
+  debugText: {
+    fontSize: 10,
+    color: '#6B7280',
+    marginTop: 8,
+    textAlign: 'center',
   },
 });
