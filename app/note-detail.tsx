@@ -212,28 +212,39 @@ export default function NoteDetailScreen() {
 
   const handleEditToggle = () => {
     if (isEditing) {
-      // Cancel editing
-      Alert.alert(
-        'Cancel Changes',
-        'Are you sure you want to cancel? Any unsaved changes will be lost.',
-        [
-          { text: 'Continue Editing', style: 'cancel' },
-          { 
-            text: 'Cancel Changes', 
-            style: 'destructive',
-            onPress: () => {
-              setIsEditing(false);
-              // Reset edited data to original
-              if (note) {
-                setEditedTitle(note.title);
-                setEditedContent(note.content);
-                setEditedImages([...note.images]);
-                setEditedAudioRecordings([...note.audioRecordings]);
+      // Cancel editing - Check if there are unsaved changes
+      const hasChanges = 
+        editedTitle !== note?.title ||
+        editedContent !== note?.content ||
+        JSON.stringify(editedImages) !== JSON.stringify(note?.images) ||
+        JSON.stringify(editedAudioRecordings) !== JSON.stringify(note?.audioRecordings);
+
+      if (hasChanges) {
+        Alert.alert(
+          'Discard Changes',
+          'You have unsaved changes. Are you sure you want to discard them?',
+          [
+            { text: 'Keep Editing', style: 'cancel' },
+            { 
+              text: 'Discard Changes', 
+              style: 'destructive',
+              onPress: () => {
+                // Reset edited data to original
+                if (note) {
+                  setEditedTitle(note.title);
+                  setEditedContent(note.content);
+                  setEditedImages([...note.images]);
+                  setEditedAudioRecordings([...note.audioRecordings]);
+                }
+                setIsEditing(false);
               }
-            }
-          },
-        ]
-      );
+            },
+          ]
+        );
+      } else {
+        // No changes, safe to exit
+        setIsEditing(false);
+      }
     } else {
       // Start editing
       setIsEditing(true);
@@ -257,14 +268,22 @@ export default function NoteDetailScreen() {
       };
 
       await updateNote(updates);
+      
+      // Reset editing state first
       setIsEditing(false);
       
+      // Then provide feedback
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      Alert.alert('Success', 'Note updated successfully!');
+      // Use setTimeout to ensure state update completes before alert
+      setTimeout(() => {
+        Alert.alert('Success', 'Note updated successfully!');
+      }, 100);
+
     } catch (error) {
+      console.error('Save error:', error);
       Alert.alert('Error', 'Failed to save changes. Please try again.');
     } finally {
       setIsSaving(false);
