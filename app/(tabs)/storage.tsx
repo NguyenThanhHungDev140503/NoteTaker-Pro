@@ -27,7 +27,7 @@ import {
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { storageLocationService } from '@/services/storageLocationService';
-import { iOSStorageService } from '@/services/iOSStorageService';
+import { iosStorageService } from '@/services/iOSStorageService';
 import { useStorageInfo } from '@/hooks/useStorageInfo';
 
 interface StorageOption {
@@ -69,8 +69,8 @@ export default function StorageScreen() {
 
   const setupiOSOptimizations = async () => {
     try {
-      await iOSStorageService.optimizeForBattery();
-      await iOSStorageService.setupiOSBackgroundSync();
+      await iosStorageService.optimizeForBattery();
+      await iosStorageService.setupiOSBackgroundSync();
       setIosOptimizations(true);
     } catch (error) {
       console.warn('iOS optimizations setup failed:', error);
@@ -84,7 +84,7 @@ export default function StorageScreen() {
       
       // Add iOS-specific options if on iOS 16+
       if (isIOS16Plus) {
-        const iosOptions = await iOSStorageService.getiOSSpecificStorageOptions();
+        const iosOptions = await iosStorageService.getiOSSpecificStorageOptions();
         const convertedOptions = iosOptions.map(iosOption => ({
           id: iosOption.id,
           name: iosOption.name,
@@ -154,10 +154,10 @@ export default function StorageScreen() {
 
     // iOS 16+ enhanced documents folder
     if (isIOS16Plus && FileSystem.documentDirectory) {
-      const detailedInfo = await iOSStorageService.getDetailedStorageInfo(FileSystem.documentDirectory);
+      const detailedInfo = await iosStorageService.getDetailedStorageInfo(FileSystem.documentDirectory);
       if (detailedInfo) {
-        options[0].freeSpace = iOSStorageService.formatBytes ? 
-          iOSStorageService.formatBytes(detailedInfo.freeSpace) : 'Available';
+        options[0].freeSpace = iosStorageService.formatBytes ? 
+          iosStorageService.formatBytes(detailedInfo.freeSpace) : 'Available';
         options[0].iosFeatures = {
           ...options[0].iosFeatures,
           iCloudSync: true,
@@ -176,7 +176,7 @@ export default function StorageScreen() {
 
       switch (option.id) {
         case 'files_app':
-          const selectedPath = await iOSStorageService.selectFilesAppLocation();
+          const selectedPath = await iosStorageService.selectFilesAppLocation();
           if (selectedPath) {
             await handleLocationChange(selectedPath, option.name);
           }
@@ -216,9 +216,9 @@ export default function StorageScreen() {
       let isValid = false;
 
       if (isIOS16Plus && path.includes('icloud_drive')) {
-        isValid = await iOSStorageService.validateiOSStorageLocation(path, 'icloud_drive');
+        isValid = await iosStorageService.validateiOSStorageLocation(path, 'icloud_drive');
       } else if (isIOS16Plus && path.includes('files_app')) {
-        isValid = await iOSStorageService.validateiOSStorageLocation(path, 'files_app');
+        isValid = await iosStorageService.validateiOSStorageLocation(path, 'files_app');
       } else {
         isValid = await storageLocationService.validateStorageLocation(path);
       }
@@ -259,7 +259,7 @@ export default function StorageScreen() {
 
       if (isIOS16Plus) {
         // Use iOS 16+ enhanced file picker
-        selectedUri = await iOSStorageService.selectFilesAppLocation();
+        selectedUri = await iosStorageService.selectFilesAppLocation();
       } else {
         // Fallback to standard document picker
         const result = await DocumentPicker.getDocumentAsync({

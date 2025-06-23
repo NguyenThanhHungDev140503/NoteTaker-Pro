@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Platform, AppState, AppStateStatus } from 'react-native';
-import { iOSStorageService } from '@/services/iOSStorageService';
+import { iosStorageService } from '@/services/iOSStorageService';
 
 interface iOSOptimization {
   batteryOptimized: boolean;
@@ -39,13 +39,13 @@ export function useIOSOptimization() {
         filesAppSupported,
         iCloudAvailable,
       ] = await Promise.all([
-        iOSStorageService.checkFilesAppSupport(),
-        iOSStorageService.checkiCloudAvailability(),
+        iosStorageService.checkFilesAppSupport(),
+        iosStorageService.checkiCloudAvailability(),
       ]);
 
       // Setup optimizations
-      await iOSStorageService.optimizeForBattery();
-      await iOSStorageService.setupiOSBackgroundSync();
+      await iosStorageService.optimizeForBattery();
+      await iosStorageService.setupiOSBackgroundSync();
 
       setOptimizations({
         batteryOptimized: true,
