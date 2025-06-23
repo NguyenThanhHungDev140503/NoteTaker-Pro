@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Star, Share, CreditCard as Edit3, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight, Save, Circle as XCircle } from 'lucide-react-native';
+import { ArrowLeft, Star, Share, Pencil, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight, Save, Circle as XCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Note } from '@/types/note';
 import { useNote } from '@/contexts/NotesContext';
@@ -583,7 +583,7 @@ export default function NoteDetailScreen() {
             <Share size={24} color="#9CA3AF" />
           </TouchableOpacity>
           
-          {/* FIXED: Enhanced edit button visibility with debug info */}
+          {/* UPDATED: Enhanced edit button with Pencil icon */}
           {isEditing ? (
             <View style={styles.editActions}>
               <TouchableOpacity 
@@ -612,7 +612,7 @@ export default function NoteDetailScreen() {
               onPress={handleEditToggle}
               testID="edit-button"
             >
-              <Edit3 size={24} color="#007AFF" />
+              <Pencil size={24} color="#007AFF" />
             </TouchableOpacity>
           )}
         </View>
