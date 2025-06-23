@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Save, Camera, Image as ImageIcon, Mic, MicOff, Play, Pause, Trash2, X, ChevronLeft, ChevronRight, CircleCheck as CheckCircle, Home } from 'lucide-react-native';
+import { Save, Camera, Image as ImageIcon, Mic, MicOff, Play, Pause, Trash2, X, ChevronLeft, ChevronRight, CircleCheck as CheckCircle, Chrome as Home } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { MediaPicker } from '@/components/MediaPicker';
