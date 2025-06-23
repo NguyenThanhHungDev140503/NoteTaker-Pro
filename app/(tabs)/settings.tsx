@@ -21,12 +21,14 @@ import {
   LogOut,
   Moon,
   Sun,
+  HardDrive,
 } from 'lucide-react-native';
 import { authService } from '@/services/authService';
 import { storageService } from '@/services/storageService';
 import { syncService } from '@/services/syncService';
 import { getUserSubscription } from '@/services/stripeService';
 import { SubscriptionCard } from '@/components/SubscriptionCard';
+import { StorageLocationCard } from '@/components/StorageLocationCard';
 
 export default function SettingsScreen() {
   const [user, setUser] = useState(null);
@@ -191,6 +193,11 @@ export default function SettingsScreen() {
             title={user?.email || 'Not signed in'}
             subtitle="Manage your account"
           />
+        </SettingsSection>
+
+        {/* Storage Location Card */}
+        <SettingsSection title="Storage">
+          <StorageLocationCard showFullInfo />
         </SettingsSection>
 
         {!isLoadingSubscription && (

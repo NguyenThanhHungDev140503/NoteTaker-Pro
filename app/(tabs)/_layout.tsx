@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Home, FileText, Settings, Plus } from 'lucide-react-native';
+import { Home, FileText, Settings, Plus, HardDrive } from 'lucide-react-native';
 
 export default function TabLayout() {
   return (
@@ -45,6 +45,15 @@ export default function TabLayout() {
           title: 'Create',
           tabBarIcon: ({ size, color }) => (
             <Plus size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="storage"
+        options={{
+          title: 'Storage',
+          tabBarIcon: ({ size, color }) => (
+            <HardDrive size={size} color={color} />
           ),
         }}
       />
