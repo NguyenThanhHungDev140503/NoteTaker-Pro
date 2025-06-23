@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
-import { CheckCircle, AlertTriangle, X } from 'lucide-react-native';
+import { CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, X } from 'lucide-react-native';
 
 interface ImportResultModalProps {
   visible: boolean;
