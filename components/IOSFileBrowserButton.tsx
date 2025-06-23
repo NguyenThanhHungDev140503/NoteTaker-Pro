@@ -11,17 +11,17 @@ import {
 import { FolderOpen, FileText, TriangleAlert as AlertTriangle } from 'lucide-react-native';
 import { iOSFileBrowserService } from '@/services/iOSFileBrowserService';
 
-interface iOSFileBrowserButtonProps {
+interface IOSFileBrowserButtonProps {
   onFilesSelected?: (files: Array<{ uri: string; name: string }>) => void;
   onImportComplete?: (result: { imported: number; errors: string[] }) => void;
   style?: any;
 }
 
-export function iOSFileBrowserButton({ 
+export function IOSFileBrowserButton({ 
   onFilesSelected, 
   onImportComplete,
   style 
-}: iOSFileBrowserButtonProps) {
+}: IOSFileBrowserButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [lastResult, setLastResult] = useState<{ imported: number; errors: string[] } | null>(null);
 

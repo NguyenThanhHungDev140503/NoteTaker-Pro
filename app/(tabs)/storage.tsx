@@ -28,7 +28,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { storageLocationService } from '@/services/storageLocationService';
 import { iosStorageService } from '@/services/iOSStorageService';
-import { iOSFileBrowserButton } from '@/components/iOSFileBrowserButton';
+import { IOSFileBrowserButton } from '@/components/IOSFileBrowserButton';
 import { useStorageInfo } from '@/hooks/useStorageInfo';
 
 interface StorageOption {
@@ -454,7 +454,7 @@ export default function StorageScreen() {
         {isIOS16Plus && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>iOS 16+ File Browser</Text>
-            <iOSFileBrowserButton
+            <IOSFileBrowserButton
               onFilesSelected={handleFilesSelected}
               onImportComplete={handleImportComplete}
             />
