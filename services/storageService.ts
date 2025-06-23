@@ -24,14 +24,28 @@ class StorageService {
 
       const jsonString = JSON.stringify(exportData, null, 2);
       const fileName = `notes-backup-${new Date().toISOString().split('T')[0]}.json`;
-      const fileUri = FileSystem.documentDirectory + fileName;
 
-      await FileSystem.writeAsStringAsync(fileUri, jsonString);
-      
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri);
+      if (Platform.OS === 'web') {
+        // Web-specific export using blob and download
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
       } else {
-        console.log('Export saved to:', fileUri);
+        // Mobile platforms using file system
+        const fileUri = FileSystem.documentDirectory + fileName;
+        await FileSystem.writeAsStringAsync(fileUri, jsonString);
+        
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri);
+        } else {
+          console.log('Export saved to:', fileUri);
+        }
       }
     } catch (error) {
       console.error('Export failed:', error);
