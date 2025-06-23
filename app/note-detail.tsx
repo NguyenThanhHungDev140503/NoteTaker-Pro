@@ -19,6 +19,7 @@ import { ArrowLeft, Star, Share, CreditCard as Edit3, Calendar, Camera, Mic, Pla
 import * as Haptics from 'expo-haptics';
 import { Note } from '@/types/note';
 import { useNote } from '@/contexts/NotesContext';
+import { AudioPlayer } from '@/components/AudioPlayer';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { 
   useSharedValue, 
@@ -344,6 +345,17 @@ export default function NoteDetailScreen() {
     }
   });
 
+  // Dummy function for audio deletion in note detail (read-only mode)
+  const handleDeleteAudio = (index: number) => {
+    // In note detail view, we don't allow deletion
+    // This could be extended to support editing mode in future
+    Alert.alert(
+      'Cannot Delete',
+      'Audio recordings cannot be deleted from the detail view. Please edit the note to remove recordings.',
+      [{ text: 'OK' }]
+    );
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -453,7 +465,7 @@ export default function NoteDetailScreen() {
           </View>
         )}
 
-        {/* Audio Recordings */}
+        {/* Audio Recordings with Enhanced Player */}
         {note.audioRecordings.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -462,15 +474,12 @@ export default function NoteDetailScreen() {
             </View>
             
             {note.audioRecordings.map((uri, index) => (
-              <View key={index} style={styles.audioItem}>
-                <View style={styles.audioInfo}>
-                  <Mic size={16} color="#007AFF" />
-                  <Text style={styles.audioText}>Recording {index + 1}</Text>
-                </View>
-                <TouchableOpacity style={styles.playButton}>
-                  <Play size={16} color="#007AFF" />
-                </TouchableOpacity>
-              </View>
+              <AudioPlayer
+                key={`${uri}-${index}`}
+                uri={uri}
+                index={index}
+                onDelete={handleDeleteAudio}
+              />
             ))}
           </View>
         )}
@@ -713,28 +722,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600',
-  },
-  audioItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  audioInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  audioText: {
-    fontSize: 16,
-    color: '#374151',
-    marginLeft: 8,
-  },
-  playButton: {
-    padding: 8,
   },
   tagsContainer: {
     flexDirection: 'row',
