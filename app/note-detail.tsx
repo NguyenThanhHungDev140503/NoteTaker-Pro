@@ -18,7 +18,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Star, Share, CreditCard as Edit3, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Note } from '@/types/note';
-import { noteService } from '@/services/noteService';
+import { useNote } from '@/contexts/NotesContext';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { 
   useSharedValue, 
@@ -35,12 +35,12 @@ const SWIPE_THRESHOLD = 50;
 
 export default function NoteDetailScreen() {
   const { noteId } = useLocalSearchParams<{ noteId: string }>();
-  const [note, setNote] = useState<Note | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { note, toggleFavorite, isFavoriteLoading } = useNote(noteId || '');
+  
+  const [loading, setLoading] = useState(!note);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
   const [isGestureActive, setIsGestureActive] = useState(false);
-  const [isFavoriteLoading, setIsFavoriteLoading] = useState(false);
   
   // Component mounted ref (JS thread only)
   const isMountedRef = useRef(true);
@@ -72,6 +72,12 @@ export default function NoteDetailScreen() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (note) {
+      setLoading(false);
+    }
+  }, [note]);
   
   // Clean up animations function
   const resetAnimations = () => {
@@ -170,42 +176,11 @@ export default function NoteDetailScreen() {
       runOnJS(setIsGestureActive)(false);
     });
 
-  useEffect(() => {
-    loadNote();
-  }, [noteId]);
-
-  const loadNote = async () => {
-    if (!noteId) return;
-    
-    try {
-      const noteData = await noteService.getNoteById(noteId);
-      if (isMountedRef.current) {
-        setNote(noteData);
-      }
-    } catch (error) {
-      if (isMountedRef.current) {
-        Alert.alert('Error', 'Failed to load note');
-        router.back();
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
-      }
-    }
-  };
-
   const handleToggleFavorite = async () => {
     if (!note || isFavoriteLoading) return;
     
-    setIsFavoriteLoading(true);
-    
     try {
-      // Optimistic update for immediate UI feedback
-      const newFavoriteState = !note.isFavorite;
-      setNote(prev => prev ? { ...prev, isFavorite: newFavoriteState } : null);
-      
-      // Persist to storage
-      await noteService.toggleFavorite(note.id);
+      await toggleFavorite();
       
       // Visual feedback
       if (Platform.OS !== 'web') {
@@ -213,15 +188,7 @@ export default function NoteDetailScreen() {
       }
       
     } catch (error) {
-      // Revert optimistic update on error
-      if (isMountedRef.current && note) {
-        setNote(prev => prev ? { ...prev, isFavorite: !newFavoriteState } : null);
-        Alert.alert('Error', 'Failed to update favorite status. Please try again.');
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setIsFavoriteLoading(false);
-      }
+      // Error is already handled in the context
     }
   };
 

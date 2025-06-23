@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { authService } from '@/services/authService';
+import { NotesProvider } from '@/contexts/NotesContext';
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -75,18 +76,20 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <Stack screenOptions={{ headerShown: false }}>
-        {isAuthenticated ? (
-          <>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="payment/success" options={{ headerShown: false }} />
-          </>
-        ) : (
-          <Stack.Screen name="auth" options={{ headerShown: false }} />
-        )}
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
+      <NotesProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          {isAuthenticated ? (
+            <>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="payment/success" options={{ headerShown: false }} />
+            </>
+          ) : (
+            <Stack.Screen name="auth" options={{ headerShown: false }} />
+          )}
+          <Stack.Screen name="+not-found" />
+        </Stack>
+        <StatusBar style="auto" />
+      </NotesProvider>
     </GestureHandlerRootView>
   );
 }

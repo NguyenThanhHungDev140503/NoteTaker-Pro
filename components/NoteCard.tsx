@@ -7,25 +7,26 @@ import {
   Image,
   Alert,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
-import { Star, Calendar, Camera, Mic, MoveVertical as MoreVertical } from 'lucide-react-native';
+import { Star, Calendar, Camera, Mic, MoveVertical as MoreVertical, Trash2 } from 'lucide-react-native';
 import { Note } from '@/types/note';
-import { noteService } from '@/services/noteService';
+import { useNote } from '@/contexts/NotesContext';
 import { router } from 'expo-router';
 
 interface NoteCardProps {
   note: Note;
-  onUpdate: () => void;
   compact?: boolean;
 }
 
-export function NoteCard({ note, onUpdate, compact = false }: NoteCardProps) {
+export function NoteCard({ note, compact = false }: NoteCardProps) {
+  const { deleteNote, toggleFavorite, isFavoriteLoading, isDeleting } = useNote(note.id);
+
   const handleToggleFavorite = async () => {
     try {
-      await noteService.toggleFavorite(note.id);
-      onUpdate();
+      await toggleFavorite();
     } catch (error) {
-      Alert.alert('Error', 'Failed to update favorite status');
+      // Error is already handled in the context
     }
   };
 
@@ -40,8 +41,7 @@ export function NoteCard({ note, onUpdate, compact = false }: NoteCardProps) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await noteService.deleteNote(note.id);
-              onUpdate();
+              await deleteNote();
             } catch (error) {
               Alert.alert('Error', 'Failed to delete note');
             }
@@ -77,6 +77,15 @@ export function NoteCard({ note, onUpdate, compact = false }: NoteCardProps) {
     return text.substr(0, maxLength) + '...';
   };
 
+  if (isDeleting) {
+    return (
+      <View style={[styles.container, compact && styles.compactContainer, styles.deletingContainer]}>
+        <ActivityIndicator size="small" color="#007AFF" />
+        <Text style={styles.deletingText}>Deleting...</Text>
+      </View>
+    );
+  }
+
   return (
     <TouchableOpacity
       style={[styles.container, compact && styles.compactContainer]}
@@ -84,15 +93,23 @@ export function NoteCard({ note, onUpdate, compact = false }: NoteCardProps) {
       onPress={handleViewNote}
     >
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleToggleFavorite}>
-          <Star
-            size={16}
-            color={note.isFavorite ? '#FFD700' : '#D1D5DB'}
-            fill={note.isFavorite ? '#FFD700' : 'transparent'}
-          />
+        <TouchableOpacity 
+          onPress={handleToggleFavorite}
+          disabled={isFavoriteLoading}
+          style={styles.favoriteButton}
+        >
+          {isFavoriteLoading ? (
+            <ActivityIndicator size="small" color="#FFD700" />
+          ) : (
+            <Star
+              size={16}
+              color={note.isFavorite ? '#FFD700' : '#D1D5DB'}
+              fill={note.isFavorite ? '#FFD700' : 'transparent'}
+            />
+          )}
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleDelete}>
-          <MoreVertical size={16} color="#9CA3AF" />
+        <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
+          <Trash2 size={16} color="#9CA3AF" />
         </TouchableOpacity>
       </View>
 
@@ -104,7 +121,7 @@ export function NoteCard({ note, onUpdate, compact = false }: NoteCardProps) {
         {truncateText(note.content, compact ? 100 : 150)}
       </Text>
 
-      {/* Hiển thị hình ảnh preview */}
+      {/* Image preview */}
       {note.images.length > 0 && (
         <View style={styles.imagePreviewContainer}>
           <ScrollView 
@@ -175,11 +192,33 @@ const styles = StyleSheet.create({
   compactContainer: {
     padding: 12,
   },
+  deletingContainer: {
+    opacity: 0.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 100,
+  },
+  deletingText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#6B7280',
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  favoriteButton: {
+    padding: 4,
+    minWidth: 24,
+    minHeight: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    padding: 4,
   },
   title: {
     fontSize: 16,

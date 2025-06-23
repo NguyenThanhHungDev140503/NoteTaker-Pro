@@ -33,7 +33,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { MediaPicker } from '@/components/MediaPicker';
 import { AudioRecorder } from '@/components/AudioRecorder';
-import { noteService } from '@/services/noteService';
+import { useNotes } from '@/contexts/NotesContext';
 import { Note } from '@/types/note';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { 
@@ -50,12 +50,12 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const SWIPE_THRESHOLD = 50;
 
 export default function CreateScreen() {
+  const { createNote, operationLoading } = useNotes();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [images, setImages] = useState<string[]>([]);
   const [audioRecordings, setAudioRecordings] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   
   // Image viewer states
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
@@ -74,6 +74,8 @@ export default function CreateScreen() {
 
   const titleInputRef = useRef<TextInput>(null);
   const contentInputRef = useRef<TextInput>(null);
+
+  const isSaving = operationLoading.create || false;
 
   // Component cleanup
   React.useEffect(() => {
@@ -274,10 +276,8 @@ export default function CreateScreen() {
       return;
     }
 
-    setIsSaving(true);
-    
     try {
-      const newNote: Omit<Note, 'id' | 'createdAt' | 'updatedAt'> = {
+      const newNoteData: Omit<Note, 'id' | 'createdAt' | 'updatedAt'> = {
         title: title.trim() || 'Untitled Note',
         content: content.trim(),
         images,
@@ -286,7 +286,7 @@ export default function CreateScreen() {
         tags: [],
       };
 
-      await noteService.createNote(newNote);
+      await createNote(newNoteData);
       
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -316,8 +316,6 @@ export default function CreateScreen() {
       );
     } catch (error) {
       Alert.alert('Error', 'Failed to save note. Please try again.');
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -470,7 +468,11 @@ export default function CreateScreen() {
           onPress={handleSave}
           disabled={isSaving}
         >
-          <Save size={20} color="#FFFFFF" />
+          {isSaving ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Save size={20} color="#FFFFFF" />
+          )}
           <Text style={styles.saveButtonText}>
             {isSaving ? 'Saving...' : 'Save'}
           </Text>

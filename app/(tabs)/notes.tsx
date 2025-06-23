@@ -1,49 +1,44 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Alert,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Grid, List, Filter } from 'lucide-react-native';
+import { Grid, List, Filter, Plus } from 'lucide-react-native';
+import { router } from 'expo-router';
 import { NoteCard } from '@/components/NoteCard';
 import { SearchBar } from '@/components/SearchBar';
 import { FilterModal } from '@/components/FilterModal';
-import { noteService } from '@/services/noteService';
+import { useNotes } from '@/contexts/NotesContext';
 import { Note } from '@/types/note';
 
 export default function NotesScreen() {
-  const [notes, setNotes] = useState<Note[]>([]);
+  const { notes, loading, error, searchNotes, refreshNotes } = useNotes();
   const [searchQuery, setSearchQuery] = useState('');
   const [isGridView, setIsGridView] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [filters, setFilters] = useState({
     sortBy: 'updatedAt' as 'updatedAt' | 'createdAt' | 'title',
     sortOrder: 'desc' as 'asc' | 'desc',
     showFavoritesOnly: false,
   });
 
-  useEffect(() => {
-    loadNotes();
-  }, []);
-
-  const loadNotes = async () => {
+  const onRefresh = async () => {
+    setRefreshing(true);
     try {
-      const allNotes = await noteService.getAllNotes();
-      setNotes(allNotes);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to load notes');
+      await refreshNotes();
+    } finally {
+      setRefreshing(false);
     }
   };
 
   const getFilteredAndSortedNotes = () => {
-    let filtered = notes.filter(note =>
-      note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      note.content.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    let filtered = searchQuery ? searchNotes(searchQuery) : notes;
 
     if (filters.showFavoritesOnly) {
       filtered = filtered.filter(note => note.isFavorite);
@@ -73,7 +68,7 @@ export default function NotesScreen() {
 
   const renderNote = ({ item }: { item: Note }) => (
     <View style={isGridView ? styles.gridItem : styles.listItem}>
-      <NoteCard note={item} onUpdate={loadNotes} compact={isGridView} />
+      <NoteCard note={item} compact={isGridView} />
     </View>
   );
 
@@ -82,7 +77,7 @@ export default function NotesScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>All Notes</Text>
+        <Text style={styles.title}>All Notes ({notes.length})</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.actionButton}
@@ -100,6 +95,12 @@ export default function NotesScreen() {
               <Grid size={20} color="#007AFF" />
             )}
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => router.push('/(tabs)/create')}
+          >
+            <Plus size={20} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -109,6 +110,15 @@ export default function NotesScreen() {
         placeholder="Search notes..."
       />
 
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={refreshNotes}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <FlatList
         data={filteredNotes}
         renderItem={renderNote}
@@ -117,6 +127,14 @@ export default function NotesScreen() {
         key={isGridView ? 'grid' : 'list'}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#007AFF']}
+            tintColor="#007AFF"
+          />
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>
@@ -127,6 +145,15 @@ export default function NotesScreen() {
                 ? 'Try a different search term'
                 : 'Create your first note to get started'}
             </Text>
+            {!searchQuery && (
+              <TouchableOpacity 
+                style={styles.createFirstNoteButton}
+                onPress={() => router.push('/(tabs)/create')}
+              >
+                <Plus size={20} color="#FFFFFF" />
+                <Text style={styles.createFirstNoteText}>Create Note</Text>
+              </TouchableOpacity>
+            )}
           </View>
         }
       />
@@ -157,6 +184,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     color: '#1F2937',
+    flex: 1,
   },
   headerActions: {
     flexDirection: 'row',
@@ -165,6 +193,15 @@ const styles = StyleSheet.create({
   actionButton: {
     padding: 8,
     marginLeft: 8,
+  },
+  createButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginLeft: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   listContainer: {
     padding: 20,
@@ -192,5 +229,47 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
     marginTop: 8,
+    marginBottom: 24,
+  },
+  createFirstNoteButton: {
+    backgroundColor: '#007AFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  createFirstNoteText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  errorContainer: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 8,
+    padding: 16,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#DC2626',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  retryButton: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
