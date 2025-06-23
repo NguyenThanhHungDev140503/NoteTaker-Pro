@@ -10,6 +10,7 @@ import {
 import { Mic, MicOff, Square } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
+import * as FileSystem from 'expo-file-system';
 
 interface AudioRecorderProps {
   onAudioRecorded: (audioUri: string) => void;
@@ -33,6 +34,33 @@ export function AudioRecorder({
     } catch (error) {
       console.error('Failed to request audio permission:', error);
       return false;
+    }
+  };
+
+  const createPersistentAudioDirectory = async () => {
+    const audioDir = `${FileSystem.documentDirectory}audio/`;
+    const dirInfo = await FileSystem.getInfoAsync(audioDir);
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(audioDir, { intermediates: true });
+    }
+    return audioDir;
+  };
+
+  const moveAudioToPersistentStorage = async (tempUri: string) => {
+    try {
+      const audioDir = await createPersistentAudioDirectory();
+      const fileName = `audio_${Date.now()}_${Math.random().toString(36).substring(7)}.m4a`;
+      const persistentUri = `${audioDir}${fileName}`;
+      
+      await FileSystem.copyAsync({
+        from: tempUri,
+        to: persistentUri
+      });
+      
+      return persistentUri;
+    } catch (error) {
+      console.error('Failed to move audio to persistent storage:', error);
+      throw error;
     }
   };
 
@@ -80,9 +108,17 @@ export function AudioRecorder({
         allowsRecordingIOS: false,
       });
 
-      const uri = recording.getURI();
-      if (uri) {
-        onAudioRecorded(uri);
+      const tempUri = recording.getURI();
+      if (tempUri) {
+        try {
+          // Move audio file to persistent storage
+          const persistentUri = await moveAudioToPersistentStorage(tempUri);
+          onAudioRecorded(persistentUri);
+        } catch (error) {
+          console.error('Failed to save audio to persistent storage:', error);
+          Alert.alert('Error', 'Failed to save audio recording');
+          return;
+        }
       }
 
       setRecording(null);
