@@ -28,6 +28,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  CheckCircle,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
@@ -56,6 +57,7 @@ export default function CreateScreen() {
   const [images, setImages] = useState<string[]>([]);
   const [audioRecordings, setAudioRecordings] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   
   // Image viewer states
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
@@ -99,6 +101,51 @@ export default function CreateScreen() {
       } catch (error) {
         console.warn('Safe state update error:', error);
       }
+    }
+  };
+
+  // Clear all form fields
+  const clearForm = () => {
+    setTitle('');
+    setContent('');
+    setImages([]);
+    setAudioRecordings([]);
+    setImageLoadingStates({});
+    setSelectedImageIndex(0);
+    setIsGestureActive(false);
+    gestureInProgressRef.current = false;
+    
+    // Reset animation values
+    try {
+      cancelAnimation(translateX);
+      cancelAnimation(scale);
+      cancelAnimation(opacity);
+      
+      translateX.value = 0;
+      scale.value = 1;
+      opacity.value = 1;
+    } catch (error) {
+      console.warn('Animation reset error:', error);
+    }
+    
+    // Focus title input for next note
+    setTimeout(() => {
+      titleInputRef.current?.focus();
+    }, 100);
+  };
+
+  // Show temporary success message
+  const showSuccessNotification = () => {
+    setShowSuccessMessage(true);
+    
+    // Auto-hide after 2 seconds
+    setTimeout(() => {
+      setShowSuccessMessage(false);
+    }, 2000);
+
+    // Haptic feedback
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
   };
 
@@ -288,32 +335,12 @@ export default function CreateScreen() {
 
       await createNote(newNoteData);
       
-      if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-
-      Alert.alert(
-        'Success',
-        'Note saved successfully!',
-        [
-          {
-            text: 'Create Another',
-            onPress: () => {
-              setTitle('');
-              setContent('');
-              setImages([]);
-              setAudioRecordings([]);
-              setImageLoadingStates({});
-              setSelectedImageIndex(0);
-              titleInputRef.current?.focus();
-            },
-          },
-          {
-            text: 'View Notes',
-            onPress: () => router.replace('/(tabs)/notes'),
-          },
-        ]
-      );
+      // Show success notification
+      showSuccessNotification();
+      
+      // Clear form for next note
+      clearForm();
+      
     } catch (error) {
       Alert.alert('Error', 'Failed to save note. Please try again.');
     }
@@ -461,6 +488,16 @@ export default function CreateScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Success Message */}
+      {showSuccessMessage && (
+        <View style={styles.successMessageContainer}>
+          <View style={styles.successMessage}>
+            <CheckCircle size={20} color="#34C759" />
+            <Text style={styles.successMessageText}>Note saved successfully!</Text>
+          </View>
+        </View>
+      )}
+
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Create Note</Text>
         <TouchableOpacity
@@ -688,6 +725,39 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  successMessageContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingHorizontal: 20,
+  },
+  successMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  successMessageText: {
+    color: '#15803D',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   header: {
     flexDirection: 'row',
