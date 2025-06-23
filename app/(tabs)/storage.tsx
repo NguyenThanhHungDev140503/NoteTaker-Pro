@@ -28,6 +28,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { storageLocationService } from '@/services/storageLocationService';
 import { iosStorageService } from '@/services/iOSStorageService';
+import { iOSFileBrowserButton } from '@/components/iOSFileBrowserButton';
 import { useStorageInfo } from '@/hooks/useStorageInfo';
 
 interface StorageOption {
@@ -286,6 +287,16 @@ export default function StorageScreen() {
     }
   };
 
+  const handleFilesSelected = (files: Array<{ uri: string; name: string }>) => {
+    console.log('Files selected for import:', files);
+  };
+
+  const handleImportComplete = (result: { imported: number; errors: string[] }) => {
+    console.log('Import completed:', result);
+    // Refresh storage info to reflect new notes
+    refreshStorageInfo();
+  };
+
   const renderStorageOption = (option: StorageOption) => {
     const isSelected = currentLocation === option.path;
     const IconComponent = option.icon;
@@ -439,6 +450,17 @@ export default function StorageScreen() {
           )}
         </View>
 
+        {/* iOS 16+ File Browser */}
+        {isIOS16Plus && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>iOS 16+ File Browser</Text>
+            <iOSFileBrowserButton
+              onFilesSelected={handleFilesSelected}
+              onImportComplete={handleImportComplete}
+            />
+          </View>
+        )}
+
         {/* iOS 16+ Information Card */}
         {isIOS16Plus && (
           <View style={styles.ios16InfoCard}>
@@ -447,11 +469,12 @@ export default function StorageScreen() {
               <Text style={styles.infoTitle}>iOS 16+ Enhanced Features</Text>
             </View>
             <Text style={styles.infoText}>
-              • Files app integration với security-scoped access{'\n'}
+              • Files app integration with security-scoped access{'\n'}
               • iCloud Drive automatic synchronization{'\n'}
               • Battery optimized background operations{'\n'}
               • Enhanced file system performance{'\n'}
-              • Improved security và privacy controls
+              • Direct notes directory browser{'\n'}
+              • Improved security and privacy controls
             </Text>
           </View>
         )}
@@ -463,11 +486,11 @@ export default function StorageScreen() {
             <Text style={styles.infoTitle}>Storage Information</Text>
           </View>
           <Text style={styles.infoText}>
-            • Notes will be stored trong selected location{'\n'}
+            • Notes will be stored in selected location{'\n'}
             • Changing location doesn't move existing notes{'\n'}
-            • Ensure selected location có sufficient space{'\n'}
+            • Ensure selected location has sufficient space{'\n'}
             {isIOS16Plus 
-              ? '• iOS 16+ provides enhanced security và sync features'
+              ? '• iOS 16+ provides enhanced security and sync features'
               : '• External storage may require additional permissions'
             }
           </Text>
