@@ -134,7 +134,94 @@ export default function NoteDetailScreen() {
     }
   };
 
-  // Gesture handlers
+  // Safe index validation
+  const safeSetSelectedImageIndex = (newIndex: number) => {
+    if (!isMountedRef.current || !note?.images?.length) return;
+    
+    const safeIndex = Math.max(0, Math.min(newIndex, note.images.length - 1));
+    setSelectedImageIndex(safeIndex);
+  };
+
+  const goToPreviousImage = () => {
+    if (!isMountedRef.current || !note?.images?.length) return;
+    safeSetSelectedImageIndex(
+      selectedImageIndex > 0 ? selectedImageIndex - 1 : note.images.length - 1
+    );
+  };
+
+  const goToNextImage = () => {
+    if (!isMountedRef.current || !note?.images?.length) return;
+    safeSetSelectedImageIndex(
+      selectedImageIndex < note.images.length - 1 ? selectedImageIndex + 1 : 0
+    );
+  };
+
+  // Safer animation functions without complex callbacks
+  const handlePreviousImage = () => {
+    if (!isMountedRef.current || !note?.images?.length) return;
+    
+    // Update index directly first
+    goToPreviousImage();
+    
+    // Then animate with simple spring
+    try {
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          translateX.value = screenWidth;
+          translateX.value = withSpring(0, {
+            damping: 20,
+            stiffness: 90
+          });
+          scale.value = withSpring(1);
+          opacity.value = withSpring(1);
+          
+          // Reset animation flag after animation completes
+          setTimeout(() => {
+            if (isMountedRef.current) {
+              isAnimating.value = false;
+            }
+          }, 300);
+        }
+      }, 50);
+    } catch (error) {
+      console.warn('Animation error:', error);
+      isAnimating.value = false;
+    }
+  };
+
+  const handleNextImage = () => {
+    if (!isMountedRef.current || !note?.images?.length) return;
+    
+    // Update index directly first
+    goToNextImage();
+    
+    // Then animate with simple spring
+    try {
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          translateX.value = -screenWidth;
+          translateX.value = withSpring(0, {
+            damping: 20,
+            stiffness: 90
+          });
+          scale.value = withSpring(1);
+          opacity.value = withSpring(1);
+          
+          // Reset animation flag after animation completes
+          setTimeout(() => {
+            if (isMountedRef.current) {
+              isAnimating.value = false;
+            }
+          }, 300);
+        }
+      }, 50);
+    } catch (error) {
+      console.warn('Animation error:', error);
+      isAnimating.value = false;
+    }
+  };
+
+  // Gesture handlers - NOW DEFINED AFTER THE FUNCTIONS IT USES
   const panGesture = Gesture.Pan()
     .onStart(() => {
       'worklet';
@@ -348,14 +435,6 @@ export default function NoteDetailScreen() {
     }
   };
 
-  // Safe index validation
-  const safeSetSelectedImageIndex = (newIndex: number) => {
-    if (!isMountedRef.current || !note?.images?.length) return;
-    
-    const safeIndex = Math.max(0, Math.min(newIndex, note.images.length - 1));
-    setSelectedImageIndex(safeIndex);
-  };
-
   const handleImagePress = (index: number) => {
     if (!isMountedRef.current || !note?.images?.length || index < 0 || index >= note.images.length) {
       console.warn('Invalid image index:', index);
@@ -386,85 +465,6 @@ export default function NoteDetailScreen() {
     
     // Reset animation values
     resetAnimations();
-  };
-
-  const goToPreviousImage = () => {
-    if (!isMountedRef.current || !note?.images?.length) return;
-    safeSetSelectedImageIndex(
-      selectedImageIndex > 0 ? selectedImageIndex - 1 : note.images.length - 1
-    );
-  };
-
-  const goToNextImage = () => {
-    if (!isMountedRef.current || !note?.images?.length) return;
-    safeSetSelectedImageIndex(
-      selectedImageIndex < note.images.length - 1 ? selectedImageIndex + 1 : 0
-    );
-  };
-
-  // Safer animation functions without complex callbacks
-  const handlePreviousImage = () => {
-    if (!isMountedRef.current || !note?.images?.length) return;
-    
-    // Update index directly first
-    goToPreviousImage();
-    
-    // Then animate with simple spring
-    try {
-      setTimeout(() => {
-        if (isMountedRef.current) {
-          translateX.value = screenWidth;
-          translateX.value = withSpring(0, {
-            damping: 20,
-            stiffness: 90
-          });
-          scale.value = withSpring(1);
-          opacity.value = withSpring(1);
-          
-          // Reset animation flag after animation completes
-          setTimeout(() => {
-            if (isMountedRef.current) {
-              isAnimating.value = false;
-            }
-          }, 300);
-        }
-      }, 50);
-    } catch (error) {
-      console.warn('Animation error:', error);
-      isAnimating.value = false;
-    }
-  };
-
-  const handleNextImage = () => {
-    if (!isMountedRef.current || !note?.images?.length) return;
-    
-    // Update index directly first
-    goToNextImage();
-    
-    // Then animate with simple spring
-    try {
-      setTimeout(() => {
-        if (isMountedRef.current) {
-          translateX.value = -screenWidth;
-          translateX.value = withSpring(0, {
-            damping: 20,
-            stiffness: 90
-          });
-          scale.value = withSpring(1);
-          opacity.value = withSpring(1);
-          
-          // Reset animation flag after animation completes
-          setTimeout(() => {
-            if (isMountedRef.current) {
-              isAnimating.value = false;
-            }
-          }, 300);
-        }
-      }, 50);
-    } catch (error) {
-      console.warn('Animation error:', error);
-      isAnimating.value = false;
-    }
   };
 
   // Edit mode handlers
