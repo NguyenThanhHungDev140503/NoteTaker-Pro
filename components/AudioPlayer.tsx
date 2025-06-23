@@ -29,17 +29,55 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
 
   const progressValue = useSharedValue(0);
   const playbackStatusRef = useRef<any>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const isProcessingRef = useRef(false);
+  const isMountedRef = useRef(true);
 
+  // Cleanup on unmount
   useEffect(() => {
+    isMountedRef.current = true;
+    
     return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
+      isMountedRef.current = false;
+      cleanupAudio();
     };
-  }, [sound]);
+  }, []);
+
+  // URI change detection
+  useEffect(() => {
+    if (uri && uri !== soundRef.current?.getURI) {
+      resetAudioState();
+    }
+  }, [uri]);
+
+  const cleanupAudio = async () => {
+    try {
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+      setSound(null);
+    } catch (error) {
+      console.warn('Audio cleanup error:', error);
+    }
+  };
+
+  const resetAudioState = () => {
+    if (!isMountedRef.current) return;
+    
+    setIsPlaying(false);
+    setIsLoading(false);
+    setPosition(0);
+    setDuration(0);
+    setIsLoaded(false);
+    setHasError(false);
+    progressValue.value = 0;
+    isProcessingRef.current = false;
+  };
 
   const formatTime = (milliseconds: number) => {
     const totalSeconds = Math.floor(milliseconds / 1000);
@@ -49,13 +87,15 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
   };
 
   const loadAudio = async () => {
+    if (isProcessingRef.current || !isMountedRef.current) return;
+    
     try {
+      isProcessingRef.current = true;
       setIsLoading(true);
+      setHasError(false);
       
-      // Unload existing sound if any
-      if (sound) {
-        await sound.unloadAsync();
-      }
+      // Cleanup existing sound
+      await cleanupAudio();
 
       // Configure audio mode
       await Audio.setAudioModeAsync({
@@ -66,97 +106,175 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
         playThroughEarpieceAndroid: false,
       });
 
-      // Load the sound
+      // Load the sound with proper error handling
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri },
-        { shouldPlay: false },
+        { 
+          shouldPlay: false,
+          progressUpdateIntervalMillis: 100,
+          positionMillis: 0
+        },
         onPlaybackStatusUpdate
       );
 
+      if (!isMountedRef.current) {
+        await newSound.unloadAsync();
+        return;
+      }
+
       setSound(newSound);
+      soundRef.current = newSound;
       setIsLoaded(true);
+
     } catch (error) {
       console.error('Error loading audio:', error);
+      if (isMountedRef.current) {
+        setHasError(true);
+        resetAudioState();
+      }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+        isProcessingRef.current = false;
+      }
     }
   };
 
   const onPlaybackStatusUpdate = (status: any) => {
+    if (!isMountedRef.current) return;
+    
     playbackStatusRef.current = status;
     
     if (status.isLoaded) {
-      setDuration(status.durationMillis || 0);
-      setPosition(status.positionMillis || 0);
-      setIsPlaying(status.isPlaying || false);
+      const currentDuration = status.durationMillis || 0;
+      const currentPosition = status.positionMillis || 0;
+      const currentPlaying = status.isPlaying || false;
+
+      // Update states safely
+      setDuration(currentDuration);
+      setPosition(currentPosition);
+      setIsPlaying(currentPlaying);
 
       // Update progress animation
-      if (status.durationMillis && status.durationMillis > 0) {
-        const progress = (status.positionMillis || 0) / status.durationMillis;
+      if (currentDuration > 0) {
+        const progress = currentPosition / currentDuration;
         progressValue.value = withTiming(progress, { duration: 100 });
       }
 
-      // Auto-stop when finished
+      // Handle audio completion
       if (status.didJustFinish) {
-        setIsPlaying(false);
-        setPosition(0);
-        progressValue.value = withTiming(0, { duration: 200 });
+        handleAudioEnded();
       }
+    } else if (status.error) {
+      console.error('Audio playback error:', status.error);
+      if (isMountedRef.current) {
+        setHasError(true);
+        resetAudioState();
+      }
+    }
+  };
+
+  const handleAudioEnded = () => {
+    if (!isMountedRef.current) return;
+    
+    console.log('Audio ended, resetting...');
+    
+    // Reset playback state
+    setIsPlaying(false);
+    setPosition(0);
+    
+    // Reset progress bar to beginning with animation
+    progressValue.value = withTiming(0, { duration: 300 });
+    
+    // Reset audio position to beginning for next play
+    if (soundRef.current) {
+      soundRef.current.setPositionAsync(0).catch(error => {
+        console.warn('Error resetting audio position:', error);
+      });
     }
   };
 
   const handlePlayPause = async () => {
+    // Prevent multiple rapid clicks
+    if (isProcessingRef.current || !isMountedRef.current) return;
+    
     try {
-      if (!isLoaded) {
+      isProcessingRef.current = true;
+
+      // Load audio if not loaded
+      if (!isLoaded || !soundRef.current) {
         await loadAudio();
-        return;
+        if (!isLoaded || !soundRef.current) return;
       }
 
-      if (!sound) return;
-
+      // Add haptic feedback
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
 
+      const currentStatus = playbackStatusRef.current;
+      
       if (isPlaying) {
-        await sound.pauseAsync();
+        // Pause audio
+        await soundRef.current.pauseAsync();
       } else {
-        await sound.playAsync();
+        // Play audio
+        if (currentStatus?.positionMillis >= currentStatus?.durationMillis) {
+          // If at end, restart from beginning
+          await soundRef.current.setPositionAsync(0);
+        }
+        await soundRef.current.playAsync();
       }
     } catch (error) {
       console.error('Error playing/pausing audio:', error);
+      if (isMountedRef.current) {
+        setHasError(true);
+        resetAudioState();
+      }
+    } finally {
+      // Small delay to prevent rapid clicking
+      setTimeout(() => {
+        isProcessingRef.current = false;
+      }, 200);
     }
   };
 
   const handleSeek = async (progress: number) => {
-    if (!sound || !duration) return;
+    if (!soundRef.current || !duration || isProcessingRef.current) return;
 
     try {
-      const seekPosition = progress * duration;
-      await sound.setPositionAsync(seekPosition);
-      setPosition(seekPosition);
-      progressValue.value = progress;
+      const seekPosition = Math.max(0, Math.min(duration, progress * duration));
+      await soundRef.current.setPositionAsync(seekPosition);
+      
+      if (isMountedRef.current) {
+        setPosition(seekPosition);
+        progressValue.value = withTiming(progress, { duration: 100 });
+      }
     } catch (error) {
       console.error('Error seeking audio:', error);
     }
   };
 
   const handleSkipBackward = async () => {
+    if (isProcessingRef.current) return;
+    
     const newPosition = Math.max(0, position - 10000); // 10 seconds back
     const progress = duration > 0 ? newPosition / duration : 0;
     await handleSeek(progress);
   };
 
   const handleSkipForward = async () => {
+    if (isProcessingRef.current) return;
+    
     const newPosition = Math.min(duration, position + 10000); // 10 seconds forward
     const progress = duration > 0 ? newPosition / duration : 0;
     await handleSeek(progress);
   };
 
   const handleDelete = () => {
-    if (sound) {
-      sound.unloadAsync();
-    }
+    if (isProcessingRef.current) return;
+    
+    cleanupAudio();
     onDelete(index);
   };
 
@@ -174,6 +292,9 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
         <View style={styles.titleRow}>
           <Volume2 size={16} color="#007AFF" />
           <Text style={styles.title}>Recording {index + 1}</Text>
+          {hasError && (
+            <Text style={styles.errorText}>(Error loading)</Text>
+          )}
         </View>
         <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
           <Trash2 size={16} color="#FF3B30" />
@@ -183,19 +304,23 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
       {/* Progress Bar */}
       <View style={styles.progressContainer}>
         <TouchableOpacity
-          style={styles.progressBar}
+          style={styles.progressBarTouch}
           onPress={(event) => {
-            const { locationX } = event.nativeEvent;
-            const { width } = event.currentTarget.measure ? 
-              { width: 200 } : // fallback width
-              event.currentTarget;
-            const progress = locationX / 200; // approximate width
-            handleSeek(Math.max(0, Math.min(1, progress)));
+            if (isLoaded && duration > 0) {
+              const { locationX, target } = event.nativeEvent;
+              // Get actual width of progress bar
+              const progressBarWidth = 250; // Approximate width, could be measured
+              const progress = Math.max(0, Math.min(1, locationX / progressBarWidth));
+              handleSeek(progress);
+            }
           }}
           activeOpacity={0.8}
+          disabled={!isLoaded || isLoading}
         >
-          <View style={styles.progressTrack}>
-            <Animated.View style={[styles.progressFill, progressBarStyle]} />
+          <View style={styles.progressBar}>
+            <View style={styles.progressTrack}>
+              <Animated.View style={[styles.progressFill, progressBarStyle]} />
+            </View>
           </View>
         </TouchableOpacity>
       </View>
@@ -209,20 +334,26 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
       {/* Controls */}
       <View style={styles.controls}>
         <TouchableOpacity
-          style={styles.controlButton}
+          style={[styles.controlButton, (!isLoaded || isLoading) && styles.controlButtonDisabled]}
           onPress={handleSkipBackward}
-          disabled={!isLoaded || isLoading}
+          disabled={!isLoaded || isLoading || isProcessingRef.current}
         >
           <SkipBack size={20} color={!isLoaded || isLoading ? '#9CA3AF' : '#007AFF'} />
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.playButton, isLoading && styles.playButtonDisabled]}
+          style={[
+            styles.playButton, 
+            (isLoading || hasError) && styles.playButtonDisabled,
+            isProcessingRef.current && styles.playButtonProcessing
+          ]}
           onPress={handlePlayPause}
-          disabled={isLoading}
+          disabled={isLoading || hasError}
         >
           {isLoading ? (
             <View style={styles.loadingDot} />
+          ) : hasError ? (
+            <Text style={styles.errorIcon}>⚠</Text>
           ) : isPlaying ? (
             <Pause size={24} color="#FFFFFF" />
           ) : (
@@ -231,9 +362,9 @@ export function AudioPlayer({ uri, index, onDelete }: AudioPlayerProps) {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.controlButton}
+          style={[styles.controlButton, (!isLoaded || isLoading) && styles.controlButtonDisabled]}
           onPress={handleSkipForward}
-          disabled={!isLoaded || isLoading}
+          disabled={!isLoaded || isLoading || isProcessingRef.current}
         >
           <SkipForward size={20} color={!isLoaded || isLoading ? '#9CA3AF' : '#007AFF'} />
         </TouchableOpacity>
@@ -268,18 +399,30 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     marginLeft: 8,
   },
+  errorText: {
+    fontSize: 12,
+    color: '#EF4444',
+    marginLeft: 8,
+    fontStyle: 'italic',
+  },
   deleteButton: {
     padding: 4,
   },
   progressContainer: {
     marginBottom: 8,
   },
-  progressBar: {
+  progressBarTouch: {
     height: 32,
     justifyContent: 'center',
   },
-  progressTrack: {
+  progressBar: {
     height: 4,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressTrack: {
+    height: '100%',
     backgroundColor: '#E5E7EB',
     borderRadius: 2,
     overflow: 'hidden',
@@ -308,6 +451,9 @@ const styles = StyleSheet.create({
     padding: 8,
     marginHorizontal: 8,
   },
+  controlButtonDisabled: {
+    opacity: 0.5,
+  },
   playButton: {
     width: 48,
     height: 48,
@@ -328,11 +474,18 @@ const styles = StyleSheet.create({
   playButtonDisabled: {
     backgroundColor: '#9CA3AF',
   },
+  playButtonProcessing: {
+    opacity: 0.7,
+  },
   loadingDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: '#FFFFFF',
     opacity: 0.8,
+  },
+  errorIcon: {
+    color: '#FFFFFF',
+    fontSize: 16,
   },
 });
