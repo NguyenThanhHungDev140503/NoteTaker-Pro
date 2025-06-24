@@ -7,6 +7,7 @@ import {
   ScrollView,
   Switch,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -29,6 +30,7 @@ import { syncService } from '@/services/syncService';
 import { getUserSubscription } from '@/services/stripeService';
 import { SubscriptionCard } from '@/components/SubscriptionCard';
 import { StorageLocationCard } from '@/components/StorageLocationCard';
+import { ImportResultModal } from '@/components/ImportResultModal';
 
 export default function SettingsScreen() {
   const [user, setUser] = useState(null);
@@ -37,6 +39,13 @@ export default function SettingsScreen() {
   const [autoSync, setAutoSync] = useState(false);
   const [userSubscription, setUserSubscription] = useState(null);
   const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    success: boolean;
+    imported: number;
+    errors: string[];
+  } | null>(null);
+  const [showImportResult, setShowImportResult] = useState(false);
 
   useEffect(() => {
     loadUserData();
@@ -90,30 +99,22 @@ export default function SettingsScreen() {
     try {
       await storageService.exportData();
       Alert.alert('Success', 'Data exported successfully');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to export data');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to export data');
     }
   };
 
   const handleImportData = async () => {
-    Alert.alert(
-      'Import Data',
-      'This will replace your current notes. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Import',
-          onPress: async () => {
-            try {
-              await storageService.importData();
-              Alert.alert('Success', 'Data imported successfully');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to import data');
-            }
-          },
-        },
-      ]
-    );
+    try {
+      setIsImporting(true);
+      const result = await storageService.importData();
+      setImportResult(result);
+      setShowImportResult(true);
+    } catch (error: any) {
+      Alert.alert('Import Error', error.message || 'Failed to import data');
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   const handleDeleteAllData = () => {
@@ -129,8 +130,8 @@ export default function SettingsScreen() {
             try {
               await storageService.clearAllData();
               Alert.alert('Success', 'All data deleted');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete data');
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to delete data');
             }
           },
         },
@@ -154,6 +155,7 @@ export default function SettingsScreen() {
     onPress,
     rightElement,
     destructive = false,
+    disabled = false,
   }: {
     icon: any;
     title: string;
@@ -161,16 +163,17 @@ export default function SettingsScreen() {
     onPress?: () => void;
     rightElement?: React.ReactNode;
     destructive?: boolean;
+    disabled?: boolean;
   }) => (
     <TouchableOpacity
-      style={styles.row}
+      style={[styles.row, disabled && styles.disabledRow]}
       onPress={onPress}
-      disabled={!onPress}
+      disabled={!onPress || disabled}
     >
       <View style={styles.rowLeft}>
         <Icon size={20} color={destructive ? '#FF3B30' : '#007AFF'} />
         <View style={styles.rowText}>
-          <Text style={[styles.rowTitle, destructive && styles.destructiveText]}>
+          <Text style={[styles.rowTitle, destructive && styles.destructiveText, disabled && styles.disabledText]}>
             {title}
           </Text>
           {subtitle && <Text style={styles.rowSubtitle}>{subtitle}</Text>}
@@ -266,6 +269,12 @@ export default function SettingsScreen() {
             title="Import Data"
             subtitle="Restore from backup"
             onPress={handleImportData}
+            disabled={isImporting}
+            rightElement={
+              isImporting ? (
+                <ActivityIndicator size="small" color="#007AFF" />
+              ) : undefined
+            }
           />
 
           {isSubscribed && (
@@ -317,6 +326,12 @@ export default function SettingsScreen() {
           />
         </SettingsSection>
       </ScrollView>
+
+      <ImportResultModal
+        visible={showImportResult}
+        result={importResult}
+        onClose={() => setShowImportResult(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -364,6 +379,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
+  disabledRow: {
+    opacity: 0.6,
+  },
   rowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -385,5 +403,8 @@ const styles = StyleSheet.create({
   },
   destructiveText: {
     color: '#FF3B30',
+  },
+  disabledText: {
+    color: '#9CA3AF',
   },
 });

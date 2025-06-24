@@ -53,7 +53,7 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <Text style={styles.title}>Welcome Back</Text>
-          <Text style={styles.subtitle}>Your notes are ready</Text>
+          <Text style={styles.subtitle}>NoteTaker-Pro</Text>
         </View>
         <TouchableOpacity style={styles.createButton} onPress={handleCreateNote}>
           <Plus size={24} color="#FFFFFF" />

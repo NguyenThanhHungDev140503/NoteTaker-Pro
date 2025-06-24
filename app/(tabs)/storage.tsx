@@ -31,6 +31,7 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
 import { storageLocationService } from '@/services/storageLocationService';
 import { iOSStorageService } from '@/services/iOSStorageService';
+import { IOSFileBrowserButton } from '@/components/IOSFileBrowserButton';
 import { useStorageInfo } from '@/hooks/useStorageInfo';
 
 interface StorageOption {
@@ -258,10 +259,26 @@ export default function StorageScreen() {
         return;
       }
 
-      // Open current storage folder in file manager
-      const currentLocation = await storageLocationService.getCurrentStorageLocation();
-      await openFolderInFileManager(currentLocation);
-      
+      let selectedUri: string | null = null;
+
+      if (isIOS16Plus) {
+        // Use iOS 16+ enhanced file picker
+        selectedUri = await iOSStorageService.selectFilesAppLocation();
+      } else {
+        // Fallback to standard document picker
+        const result = await DocumentPicker.getDocumentAsync({
+          type: '*/*',
+          copyToCacheDirectory: false,
+        });
+
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          selectedUri = result.assets[0].uri;
+        }
+      }
+
+      if (selectedUri) {
+        await handleLocationChange(selectedUri, 'Custom Location');
+      }
     } catch (error) {
       console.error('Custom location selection failed:', error);
       Alert.alert(
@@ -273,41 +290,41 @@ export default function StorageScreen() {
     }
   };
 
-  // Hàm mở thư mục trong trình quản lý tệp
+  // Function to open folder in file manager
   const openFolderInFileManager = async (folderPath: string) => {
     try {
       if (Platform.OS === 'android') {
-        // Kiểm tra thư mục tồn tại
+        // Check if directory exists
         const dirInfo = await FileSystem.getInfoAsync(folderPath);
         if (!dirInfo.exists) {
-          // Nếu thư mục không tồn tại, tạo mới
+          // Create directory if it doesn't exist
           await FileSystem.makeDirectoryAsync(folderPath, { intermediates: true });
         }
 
         try {
-          // Chuyển đổi file:// URI thành content:// URI
+          // Convert file:// URI to content:// URI
           const contentUri = await FileSystem.getContentUriAsync(folderPath);
           
-          // Mở thư mục trong trình quản lý tệp
+          // Open folder in file manager
           await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
             data: contentUri,
             flags: 1,  // FLAG_GRANT_READ_URI_PERMISSION
             type: 'resource/folder'
           });
         } catch (err) {
-          // Nếu không mở được bằng folder mime type, thử mở bằng Intent.ACTION_OPEN_DOCUMENT_TREE
+          // Fallback to ACTION_OPEN_DOCUMENT_TREE if folder can't be opened directly
           console.log('Falling back to ACTION_OPEN_DOCUMENT_TREE');
           await IntentLauncher.startActivityAsync('android.intent.action.OPEN_DOCUMENT_TREE', {});
         }
       } else if (Platform.OS === 'ios') {
         try {
-          // Thử mở thư mục trong Files app sử dụng URL scheme
-          // Chuyển đổi đường dẫn file:// thành shareddocuments://
+          // Try to open folder in Files app using URL scheme
+          // Convert file:// path to shareddocuments://
           if (folderPath.startsWith('file://')) {
-            // Trên iOS, thử sử dụng URL scheme shareddocuments:// để mở Files app
+            // On iOS, try using shareddocuments:// URL scheme to open Files app
             const filesAppUrl = folderPath.replace('file://', 'shareddocuments://');
             
-            // Mở URL bằng Linking
+            // Open URL with Linking
             const canOpen = await Linking.canOpenURL(filesAppUrl);
             if (canOpen) {
               await Linking.openURL(filesAppUrl);
@@ -315,17 +332,17 @@ export default function StorageScreen() {
             }
           }
           
-          // Nếu không thể mở trực tiếp, thử sử dụng expo-sharing để chia sẻ thư mục
+          // If direct opening fails, try using expo-sharing to share the folder
           const shareResult = await Sharing.isAvailableAsync();
           if (shareResult) {
             await Sharing.shareAsync(folderPath, {
-              UTI: 'public.folder', // UTI cho thư mục
+              UTI: 'public.folder', // UTI for folders
               dialogTitle: 'Open in Files App'
             });
             return;
           }
           
-          // Nếu không thể chia sẻ, hiển thị thông báo cho người dùng
+          // If sharing is not available, show message to user
           Alert.alert(
             'iOS Limitation',
             'Cannot open folder directly. You can access your notes through the Files app manually.'
@@ -347,6 +364,16 @@ export default function StorageScreen() {
         'Could not open the folder in file manager. The folder may not be accessible.'
       );
     }
+  };
+
+  const handleFilesSelected = (files: Array<{ uri: string; name: string }>) => {
+    console.log('Files selected for import:', files);
+  };
+
+  const handleImportComplete = (result: { imported: number; errors: string[] }) => {
+    console.log('Import completed:', result);
+    // Refresh storage info to reflect new notes
+    refreshStorageInfo();
   };
 
   const renderStorageOption = (option: StorageOption) => {
@@ -515,6 +542,17 @@ export default function StorageScreen() {
           )}
         </View>
 
+        {/* iOS 16+ File Browser */}
+        {isIOS16Plus && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>iOS 16+ File Browser</Text>
+            <IOSFileBrowserButton
+              onFilesSelected={handleFilesSelected}
+              onImportComplete={handleImportComplete}
+            />
+          </View>
+        )}
+
         {/* iOS 16+ Information Card */}
         {isIOS16Plus && (
           <View style={styles.ios16InfoCard}>
@@ -523,11 +561,12 @@ export default function StorageScreen() {
               <Text style={styles.infoTitle}>iOS 16+ Enhanced Features</Text>
             </View>
             <Text style={styles.infoText}>
-              • Files app integration với security-scoped access{'\n'}
+              • Files app integration with security-scoped access{'\n'}
               • iCloud Drive automatic synchronization{'\n'}
               • Battery optimized background operations{'\n'}
               • Enhanced file system performance{'\n'}
-              • Improved security và privacy controls
+              • Direct notes directory browser{'\n'}
+              • Improved security and privacy controls
             </Text>
           </View>
         )}
@@ -539,11 +578,11 @@ export default function StorageScreen() {
             <Text style={styles.infoTitle}>Storage Information</Text>
           </View>
           <Text style={styles.infoText}>
-            • Notes will be stored trong selected location{'\n'}
+            • Notes will be stored in selected location{'\n'}
             • Changing location doesn't move existing notes{'\n'}
-            • Ensure selected location có sufficient space{'\n'}
+            • Ensure selected location has sufficient space{'\n'}
             {isIOS16Plus 
-              ? '• iOS 16+ provides enhanced security và sync features'
+              ? '• iOS 16+ provides enhanced security and sync features'
               : '• External storage may require additional permissions'
             }
           </Text>

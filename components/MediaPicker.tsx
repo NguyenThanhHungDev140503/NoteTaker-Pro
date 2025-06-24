@@ -3,6 +3,7 @@ import { View, TouchableOpacity, Text, StyleSheet, Alert, Platform } from 'react
 import { Camera, Image as ImageIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
+import * as FileSystem from 'expo-file-system';
 
 interface MediaPickerProps {
   onImagePicked: (imageUri: string) => void;
@@ -17,6 +18,34 @@ export function MediaPicker({ onImagePicked }: MediaPickerProps) {
       camera: cameraPermission.status === 'granted',
       library: libraryPermission.status === 'granted',
     };
+  };
+
+  const createPersistentImageDirectory = async () => {
+    const imageDir = `${FileSystem.documentDirectory}images/`;
+    const dirInfo = await FileSystem.getInfoAsync(imageDir);
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(imageDir, { intermediates: true });
+    }
+    return imageDir;
+  };
+
+  const moveImageToPersistentStorage = async (tempUri: string) => {
+    try {
+      const imageDir = await createPersistentImageDirectory();
+      const fileExtension = tempUri.split('.').pop() || 'jpg';
+      const fileName = `image_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
+      const persistentUri = `${imageDir}${fileName}`;
+      
+      await FileSystem.copyAsync({
+        from: tempUri,
+        to: persistentUri
+      });
+      
+      return persistentUri;
+    } catch (error) {
+      console.error('Failed to move image to persistent storage:', error);
+      throw error;
+    }
   };
 
   const pickImageFromLibrary = async () => {
@@ -35,9 +64,16 @@ export function MediaPicker({ onImagePicked }: MediaPickerProps) {
       });
 
       if (!result.canceled && result.assets[0]) {
-        onImagePicked(result.assets[0].uri);
-        if (Platform.OS !== 'web') {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        try {
+          // Move image file to persistent storage
+          const persistentUri = await moveImageToPersistentStorage(result.assets[0].uri);
+          onImagePicked(persistentUri);
+          if (Platform.OS !== 'web') {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }
+        } catch (error) {
+          console.error('Failed to save image to persistent storage:', error);
+          Alert.alert('Error', 'Failed to save image');
         }
       }
     } catch (error) {
@@ -60,9 +96,16 @@ export function MediaPicker({ onImagePicked }: MediaPickerProps) {
       });
 
       if (!result.canceled && result.assets[0]) {
-        onImagePicked(result.assets[0].uri);
-        if (Platform.OS !== 'web') {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        try {
+          // Move image file to persistent storage
+          const persistentUri = await moveImageToPersistentStorage(result.assets[0].uri);
+          onImagePicked(persistentUri);
+          if (Platform.OS !== 'web') {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }
+        } catch (error) {
+          console.error('Failed to save image to persistent storage:', error);
+          Alert.alert('Error', 'Failed to save image');
         }
       }
     } catch (error) {
