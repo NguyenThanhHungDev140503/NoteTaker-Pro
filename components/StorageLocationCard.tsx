@@ -4,10 +4,17 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  Platform,
+  Alert,
+  Linking,
 } from 'react-native';
-import { HardDrive, Settings, ExternalLink } from 'lucide-react-native';
+import { HardDrive, Settings, ExternalLink, FolderOpen } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useStorageInfo } from '@/hooks/useStorageInfo';
+import { storageLocationService } from '@/services/storageLocationService';
+import * as FileSystem from 'expo-file-system';
+import * as IntentLauncher from 'expo-intent-launcher';
+import * as Sharing from 'expo-sharing';
 
 interface StorageLocationCardProps {
   showFullInfo?: boolean;
@@ -18,6 +25,85 @@ export function StorageLocationCard({ showFullInfo = false }: StorageLocationCar
 
   const handlePress = () => {
     router.push('/(tabs)/storage');
+  };
+
+  // Function to open storage folder in file manager
+  const openStorageLocation = async () => {
+    if (!storageInfo) return;
+    
+    try {
+      const folderPath = storageInfo.currentLocation;
+      
+      if (Platform.OS === 'android') {
+        // Check if directory exists
+        const dirInfo = await FileSystem.getInfoAsync(folderPath);
+        if (!dirInfo.exists) {
+          await FileSystem.makeDirectoryAsync(folderPath, { intermediates: true });
+        }
+
+        try {
+          // Convert file:// URI to content:// URI
+          const contentUri = await FileSystem.getContentUriAsync(folderPath);
+          
+          // Open folder in file manager
+          await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+            data: contentUri,
+            flags: 1,  // FLAG_GRANT_READ_URI_PERMISSION
+            type: 'resource/folder'
+          });
+        } catch (err) {
+          // Fallback to ACTION_OPEN_DOCUMENT_TREE if folder can't be opened directly
+          console.log('Falling back to ACTION_OPEN_DOCUMENT_TREE');
+          await IntentLauncher.startActivityAsync('android.intent.action.OPEN_DOCUMENT_TREE', {});
+        }
+      } else if (Platform.OS === 'ios') {
+        try {
+          // Try to open folder in Files app using URL scheme
+          // Convert file:// path to shareddocuments:// URL
+          if (folderPath.startsWith('file://')) {
+            // On iOS, try using shareddocuments:// URL scheme to open Files app
+            const filesAppUrl = folderPath.replace('file://', 'shareddocuments://');
+            
+            // Open URL with Linking
+            const canOpen = await Linking.canOpenURL(filesAppUrl);
+            if (canOpen) {
+              await Linking.openURL(filesAppUrl);
+              return;
+            }
+          }
+          
+          // If direct opening fails, try using expo-sharing to share the folder
+          const shareResult = await Sharing.isAvailableAsync();
+          if (shareResult) {
+            await Sharing.shareAsync(folderPath, {
+              UTI: 'public.folder', // UTI for folders
+              dialogTitle: 'Open in Files App'
+            });
+            return;
+          }
+          
+          // If sharing is not available, show message to user
+          Alert.alert(
+            'iOS Limitation',
+            'Cannot open folder directly. You can access your notes through the Files app manually.'
+          );
+        } catch (error) {
+          console.error('Failed to open folder on iOS:', error);
+          Alert.alert(
+            'iOS Limitation',
+            'Opening folder in Files app is not supported on this iOS version. You can access your notes through the Files app manually.'
+          );
+        }
+      } else {
+        Alert.alert('Not Supported', 'This feature is only supported on mobile devices.');
+      }
+    } catch (error) {
+      console.error('Failed to open folder:', error);
+      Alert.alert(
+        'Error',
+        'Could not open the folder in file manager. The folder may not be accessible.'
+      );
+    }
   };
 
   if (loading || !storageInfo) {
@@ -67,6 +153,13 @@ export function StorageLocationCard({ showFullInfo = false }: StorageLocationCar
             {storageInfo.locationType.charAt(0).toUpperCase() + storageInfo.locationType.slice(1)} Storage
           </Text>
         </View>
+
+        <TouchableOpacity style={styles.openButton} onPress={openStorageLocation}>
+          <FolderOpen size={14} color="#007AFF" />
+          <Text style={styles.openButtonText}>
+            {Platform.OS === 'ios' ? 'Open in Files App' : 'Open in File Manager'}
+          </Text>
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -141,6 +234,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+    fontWeight: '500',
+  },
+  openButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0F9FF',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    marginTop: 8,
+    gap: 6,
+  },
+  openButtonText: {
+    fontSize: 12,
+    color: '#007AFF',
     fontWeight: '500',
   },
 });

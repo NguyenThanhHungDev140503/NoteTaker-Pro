@@ -8,6 +8,7 @@ import {
   Alert,
   Platform,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
@@ -26,6 +27,8 @@ import {
 } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
+import * as IntentLauncher from 'expo-intent-launcher';
+import * as Sharing from 'expo-sharing';
 import { storageLocationService } from '@/services/storageLocationService';
 import { iOSStorageService } from '@/services/iOSStorageService';
 import { useStorageInfo } from '@/hooks/useStorageInfo';
@@ -255,26 +258,10 @@ export default function StorageScreen() {
         return;
       }
 
-      let selectedUri: string | null = null;
-
-      if (isIOS16Plus) {
-        // Use iOS 16+ enhanced file picker
-        selectedUri = await iOSStorageService.selectFilesAppLocation();
-      } else {
-        // Fallback to standard document picker
-        const result = await DocumentPicker.getDocumentAsync({
-          type: '*/*',
-          copyToCacheDirectory: false,
-        });
-
-        if (!result.canceled && result.assets && result.assets.length > 0) {
-          selectedUri = result.assets[0].uri;
-        }
-      }
-
-      if (selectedUri) {
-        await handleLocationChange(selectedUri, 'Custom Location');
-      }
+      // Open current storage folder in file manager
+      const currentLocation = await storageLocationService.getCurrentStorageLocation();
+      await openFolderInFileManager(currentLocation);
+      
     } catch (error) {
       console.error('Custom location selection failed:', error);
       Alert.alert(
@@ -282,6 +269,82 @@ export default function StorageScreen() {
         isIOS16Plus 
           ? 'Failed to access Files app. Please ensure you have granted necessary permissions.'
           : 'Failed to select storage location. Please try again.'
+      );
+    }
+  };
+
+  // Hàm mở thư mục trong trình quản lý tệp
+  const openFolderInFileManager = async (folderPath: string) => {
+    try {
+      if (Platform.OS === 'android') {
+        // Kiểm tra thư mục tồn tại
+        const dirInfo = await FileSystem.getInfoAsync(folderPath);
+        if (!dirInfo.exists) {
+          // Nếu thư mục không tồn tại, tạo mới
+          await FileSystem.makeDirectoryAsync(folderPath, { intermediates: true });
+        }
+
+        try {
+          // Chuyển đổi file:// URI thành content:// URI
+          const contentUri = await FileSystem.getContentUriAsync(folderPath);
+          
+          // Mở thư mục trong trình quản lý tệp
+          await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+            data: contentUri,
+            flags: 1,  // FLAG_GRANT_READ_URI_PERMISSION
+            type: 'resource/folder'
+          });
+        } catch (err) {
+          // Nếu không mở được bằng folder mime type, thử mở bằng Intent.ACTION_OPEN_DOCUMENT_TREE
+          console.log('Falling back to ACTION_OPEN_DOCUMENT_TREE');
+          await IntentLauncher.startActivityAsync('android.intent.action.OPEN_DOCUMENT_TREE', {});
+        }
+      } else if (Platform.OS === 'ios') {
+        try {
+          // Thử mở thư mục trong Files app sử dụng URL scheme
+          // Chuyển đổi đường dẫn file:// thành shareddocuments://
+          if (folderPath.startsWith('file://')) {
+            // Trên iOS, thử sử dụng URL scheme shareddocuments:// để mở Files app
+            const filesAppUrl = folderPath.replace('file://', 'shareddocuments://');
+            
+            // Mở URL bằng Linking
+            const canOpen = await Linking.canOpenURL(filesAppUrl);
+            if (canOpen) {
+              await Linking.openURL(filesAppUrl);
+              return;
+            }
+          }
+          
+          // Nếu không thể mở trực tiếp, thử sử dụng expo-sharing để chia sẻ thư mục
+          const shareResult = await Sharing.isAvailableAsync();
+          if (shareResult) {
+            await Sharing.shareAsync(folderPath, {
+              UTI: 'public.folder', // UTI cho thư mục
+              dialogTitle: 'Open in Files App'
+            });
+            return;
+          }
+          
+          // Nếu không thể chia sẻ, hiển thị thông báo cho người dùng
+          Alert.alert(
+            'iOS Limitation',
+            'Cannot open folder directly. You can access your notes through the Files app manually.'
+          );
+        } catch (error) {
+          console.error('Failed to open folder on iOS:', error);
+          Alert.alert(
+            'iOS Limitation',
+            'Opening folder in Files app is not supported on this iOS version. You can access your notes through the Files app manually.'
+          );
+        }
+      } else {
+        Alert.alert('Not Supported', 'This feature is only supported on mobile devices.');
+      }
+    } catch (error) {
+      console.error('Failed to open folder:', error);
+      Alert.alert(
+        'Error',
+        'Could not open the folder in file manager. The folder may not be accessible.'
       );
     }
   };
@@ -437,6 +500,19 @@ export default function StorageScreen() {
               )}
             </View>
           )}
+
+          {Platform.OS === 'android' && (
+            <TouchableOpacity 
+              style={styles.openLocationButton}
+              onPress={async () => {
+                const location = await storageLocationService.getCurrentStorageLocation();
+                openFolderInFileManager(location);
+              }}
+            >
+              <FolderOpen size={16} color="#FFFFFF" />
+              <Text style={styles.openLocationText}>Open in File Manager</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* iOS 16+ Information Card */}
@@ -493,14 +569,18 @@ export default function StorageScreen() {
             <FolderOpen size={24} color="#007AFF" />
             <View style={styles.customLocationText}>
               <Text style={styles.customLocationTitle}>
-                {isIOS16Plus ? 'Browse Files App' : 'Select Custom Location'}
+                {Platform.OS === 'ios' 
+                  ? (isIOS16Plus ? 'Browse Files App' : 'Select Custom Location')
+                  : 'Browse File Location'}
               </Text>
               <Text style={styles.customLocationSubtitle}>
                 {Platform.OS === 'web' 
                   ? 'Not available on web platform'
-                  : isIOS16Plus
-                    ? 'Choose any location accessible through iOS Files app'
-                    : 'Choose any accessible folder on your device'
+                  : Platform.OS === 'ios'
+                    ? (isIOS16Plus
+                      ? 'Choose any location accessible through iOS Files app'
+                      : 'Choose any accessible folder on your device')
+                    : 'Open your current storage location in file manager'
                 }
               </Text>
             </View>
@@ -658,6 +738,7 @@ const styles = StyleSheet.create({
   storageStats: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    marginBottom: 16,
   },
   stat: {
     alignItems: 'center',
@@ -879,5 +960,20 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 14,
     color: '#1E40AF',
+  },
+  openLocationButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  openLocationText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginLeft: 8,
   },
 });
