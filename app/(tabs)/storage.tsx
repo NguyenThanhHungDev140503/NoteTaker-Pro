@@ -31,7 +31,6 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
 import { storageLocationService } from '@/services/storageLocationService';
 import { iOSStorageServiceInstance as iOSStorageService } from '@/services/iOSStorageService';
-import { IOSFileBrowserButton } from '@/components/IOSFileBrowserButton';
 import { useStorageInfo } from '@/hooks/useStorageInfo';
 
 interface StorageOption {
@@ -252,6 +251,31 @@ export default function StorageScreen() {
     }
   };
 
+  const openCurrentStorageLocation = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        Alert.alert(
+          'Web Platform Limitation', 
+          'File browser is not supported on web platform.'
+        );
+        return;
+      }
+
+      // Get current storage location
+      const currentStoragePath = await storageLocationService.getCurrentStorageLocation();
+      
+      // Open current storage folder in file manager
+      await openFolderInFileManager(currentStoragePath);
+      
+    } catch (error) {
+      console.error('Failed to open current storage location:', error);
+      Alert.alert(
+        'Error',
+        'Could not open the current storage folder. Please check if the location is accessible.'
+      );
+    }
+  };
+
   const handleSelectCustomLocation = async () => {
     try {
       if (Platform.OS === 'web') {
@@ -369,15 +393,6 @@ export default function StorageScreen() {
     }
   };
 
-  const handleFilesSelected = (files: Array<{ uri: string; name: string }>) => {
-    console.log('Files selected for import:', files);
-  };
-
-  const handleImportComplete = (result: { imported: number; errors: string[] }) => {
-    console.log('Import completed:', result);
-    // Refresh storage info to reflect new notes
-    refreshStorageInfo();
-  };
 
   const renderStorageOption = (option: StorageOption) => {
     const isSelected = currentLocation === option.path;
@@ -548,11 +563,14 @@ export default function StorageScreen() {
         {/* iOS 16+ File Browser */}
         {isIOS16Plus && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>iOS 16+ File Browser</Text>
-            <IOSFileBrowserButton
-              onFilesSelected={handleFilesSelected}
-              onImportComplete={handleImportComplete}
-            />
+            <Text style={styles.sectionTitle}>Trình duyệt tệp iOS 16+</Text>
+            <TouchableOpacity
+              style={styles.iosFileBrowserButton}
+              onPress={openCurrentStorageLocation}
+            >
+              <FolderOpen size={20} color="#FFFFFF" />
+              <Text style={styles.iosFileBrowserText}>Mở thư mục Notes hiện tại</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -602,27 +620,43 @@ export default function StorageScreen() {
           
           {storageOptions.map(renderStorageOption)}
           
-          {/* Custom Location Option */}
+          {/* Browse Current Storage Location */}
           <TouchableOpacity
             style={styles.customLocationButton}
-            onPress={handleSelectCustomLocation}
+            onPress={openCurrentStorageLocation}
             disabled={Platform.OS === 'web'}
           >
             <FolderOpen size={24} color="#007AFF" />
             <View style={styles.customLocationText}>
               <Text style={styles.customLocationTitle}>
-                {Platform.OS === 'ios' 
-                  ? (isIOS16Plus ? 'Browse Files App' : 'Select Custom Location')
-                  : 'Browse File Location'}
+                Mở thư mục Notes hiện tại
               </Text>
               <Text style={styles.customLocationSubtitle}>
                 {Platform.OS === 'web' 
-                  ? 'Not available on web platform'
-                  : Platform.OS === 'ios'
-                    ? (isIOS16Plus
-                      ? 'Choose any location accessible through iOS Files app'
-                      : 'Choose any accessible folder on your device')
-                    : 'Open your current storage location in file manager'
+                  ? 'Không khả dụng trên nền tảng web'
+                  : 'Mở thư mục lưu trữ ghi chú hiện tại trong trình quản lý tệp'
+                }
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Custom Location Option */}
+          <TouchableOpacity
+            style={[styles.customLocationButton, { marginTop: 10 }]}
+            onPress={handleSelectCustomLocation}
+            disabled={Platform.OS === 'web'}
+          >
+            <Folder size={24} color="#007AFF" />
+            <View style={styles.customLocationText}>
+              <Text style={styles.customLocationTitle}>
+                {Platform.OS === 'ios' 
+                  ? (isIOS16Plus ? 'Chọn thư mục lưu trữ mới' : 'Chọn thư mục tùy chỉnh')
+                  : 'Chọn thư mục lưu trữ mới'}
+              </Text>
+              <Text style={styles.customLocationSubtitle}>
+                {Platform.OS === 'web' 
+                  ? 'Không khả dụng trên nền tảng web'
+                  : 'Chọn một thư mục khác để lưu trữ ghi chú của bạn'
                 }
               </Text>
             </View>
@@ -1016,6 +1050,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
+    marginLeft: 8,
+  },
+  iosFileBrowserButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  iosFileBrowserText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
     marginLeft: 8,
   },
 });
