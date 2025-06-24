@@ -355,4 +355,4 @@ class iOSStorageService {
   }
 }
 
-export const iosStorageService = new iOSStorageService();
+export const iOSStorageServiceInstance = new iOSStorageService();

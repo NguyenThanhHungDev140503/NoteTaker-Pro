@@ -30,7 +30,7 @@ import * as FileSystem from 'expo-file-system';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
 import { storageLocationService } from '@/services/storageLocationService';
-import { iOSStorageService } from '@/services/iOSStorageService';
+import { iOSStorageServiceInstance as iOSStorageService } from '@/services/iOSStorageService';
 import { IOSFileBrowserButton } from '@/components/IOSFileBrowserButton';
 import { useStorageInfo } from '@/hooks/useStorageInfo';
 
@@ -158,14 +158,17 @@ export default function StorageScreen() {
 
     // iOS 16+ enhanced documents folder
     if (isIOS16Plus && FileSystem.documentDirectory) {
-      const detailedInfo = await iOSStorageService.getDetailedStorageInfo(FileSystem.documentDirectory);
-      if (detailedInfo) {
-        options[0].freeSpace = iOSStorageService.formatBytes ? 
-          iOSStorageService.formatBytes(detailedInfo.freeSpace) : 'Available';
-        options[0].iosFeatures = {
-          ...options[0].iosFeatures,
-          iCloudSync: true,
-        };
+      try {
+        const detailedInfo = await iOSStorageService.getDetailedStorageInfo(FileSystem.documentDirectory);
+        if (detailedInfo) {
+          options[0].freeSpace = iOSStorageService.formatBytes(detailedInfo.freeSpace);
+          options[0].iosFeatures = {
+            ...options[0].iosFeatures,
+            iCloudSync: true,
+          };
+        }
+      } catch (error) {
+        console.warn('Failed to get iOS storage details:', error);
       }
     }
 
