@@ -326,58 +326,45 @@ export default function StorageScreen() {
     }
   };
 
-  // Function to open folder in file manager
-  const openFolderInFileManager = async (folderPath: string) => {
-    try {
-      console.log('Opening folder in file manager:', folderPath);
-      
-      if (Platform.OS === 'android') {
-        // Check if directory exists
-        const dirInfo = await FileSystem.getInfoAsync(folderPath);
-        if (!dirInfo.exists) {
-          // Create directory if it doesn't exist
-          await FileSystem.makeDirectoryAsync(folderPath, { intermediates: true });
-          console.log('Created directory:', folderPath);
+  // Helper function to try iOS URL schemes systematically
+  const tryiOSURLSchemes = async (folderPath: string): Promise<boolean> => {
+    if (!folderPath.startsWith('file://')) return false;
+    
+    const cleanPath = folderPath.replace('file://', '');
+    console.log('Clean iOS path:', cleanPath);
+    
+    // Define URL schemes in order of reliability
+    const urlSchemes = [
+      { scheme: 'shareddocuments://', name: 'Files App (General)' },
+      { scheme: `shareddocuments://${encodeURIComponent(cleanPath)}`, name: 'Files App (with path)' },
+      { scheme: 'files://', name: 'Files App (Direct)' },
+      { scheme: `files://${encodeURIComponent(cleanPath)}`, name: 'Files App (Direct with path)' }
+    ];
+    
+    // Try each URL scheme
+    for (const { scheme, name } of urlSchemes) {
+      console.log(`Trying ${name}:`, scheme);
+      try {
+        const canOpen = await Linking.canOpenURL(scheme);
+        if (canOpen) {
+          console.log(`Successfully opening with ${name}`);
+          await Linking.openURL(scheme);
+          return true;
         }
+      } catch (urlError) {
+        console.log(`Failed with ${name}:`, urlError);
+      }
+    }
+    
+    return false;
+  };
 
-        // Convert file:// URI to content:// URI outside try blocks to maintain scope
-        let contentUri = '';
-        try {
-          contentUri = await FileSystem.getContentUriAsync(folderPath);
-          console.log('Content URI:', contentUri);
-          
-          // Open folder in file manager
-          await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-            data: contentUri,
-            flags: 1,  // FLAG_GRANT_READ_URI_PERMISSION
-            type: 'resource/folder'
-          });
-        } catch (err) {
-          console.error('Error opening folder directly:', err);
-          
-          // Fallback to ACTION_OPEN_DOCUMENT_TREE if folder can't be opened directly
-          console.log('Falling back to ACTION_OPEN_DOCUMENT_TREE');
-          
-          // On Android, we can try to open the specific directory using Storage Access Framework
-          // This will at least open the file picker in a location close to our target
-          try {
-            await IntentLauncher.startActivityAsync('android.intent.action.OPEN_DOCUMENT_TREE', {
-              // We can't specify the exact directory, but we can try to get close
-              // by using the initial URI hint (Android 11+)
-              extra: {
-                'android.provider.extra.INITIAL_URI': contentUri
-              }
-            });
-          } catch (intentError) {
-            // If that fails too, just open the document tree picker
-            await IntentLauncher.startActivityAsync('android.intent.action.OPEN_DOCUMENT_TREE', {});
-          }
-        }
-      } else if (Platform.OS === 'ios') {
-        try {
-          // Tạo marker file thân thiện với người dùng
-          const markerFilePath = `${folderPath}/📱_SuperNote_Folder_📱.txt`;
-          const markerContent = `🗂️ Đây là thư mục lưu trữ ghi chú SuperNote của bạn
+  // Helper function to create and share marker file
+  const createAndShareMarkerFile = async (folderPath: string): Promise<boolean> => {
+    try {
+      // Create user-friendly marker file
+      const markerFilePath = `${folderPath}/📱_SuperNote_Folder_📱.txt`;
+      const markerContent = `🗂️ Đây là thư mục lưu trữ ghi chú SuperNote của bạn
 
 📅 Thời gian tạo: ${new Date().toLocaleString('vi-VN')}
 📍 Đường dẫn: ${folderPath}
@@ -391,134 +378,150 @@ export default function StorageScreen() {
 2. Chọn "On My iPhone/iPad" 
 3. Tìm file "📱_SuperNote_Folder_📱.txt"
 4. Thư mục chứa file này là thư mục lưu trữ ghi chú`;
+      
+      await FileSystem.writeAsStringAsync(markerFilePath, markerContent);
+      console.log('Created marker file:', markerFilePath);
+      
+      // Try sharing the marker file
+      const shareResult = await Sharing.isAvailableAsync();
+      if (shareResult) {
+        console.log('Sharing marker file to help user locate folder');
+        await Sharing.shareAsync(markerFilePath, {
+          UTI: 'public.plain-text',
+          dialogTitle: 'Mở thư mục Notes trong Files App'
+        });
+        return true;
+      }
+    } catch (error) {
+      console.log('Failed to create/share marker file:', error);
+    }
+    
+    return false;
+  };
+
+  // Function to open folder in file manager
+  const openFolderInFileManager = async (folderPath: string) => {
+    try {
+      console.log('Opening folder in file manager:', folderPath);
+      
+      if (Platform.OS === 'android') {
+        // Android implementation (working well)
+        const dirInfo = await FileSystem.getInfoAsync(folderPath);
+        if (!dirInfo.exists) {
+          await FileSystem.makeDirectoryAsync(folderPath, { intermediates: true });
+          console.log('Created directory:', folderPath);
+        }
+
+        let contentUri = '';
+        try {
+          contentUri = await FileSystem.getContentUriAsync(folderPath);
+          console.log('Content URI:', contentUri);
+          
+          await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+            data: contentUri,
+            flags: 1,  // FLAG_GRANT_READ_URI_PERMISSION
+            type: 'resource/folder'
+          });
+        } catch (err) {
+          console.error('Error opening folder directly:', err);
           
           try {
-            await FileSystem.writeAsStringAsync(markerFilePath, markerContent);
-            console.log('Created marker file:', markerFilePath);
-          } catch (markerError) {
-            console.log('Failed to create marker file:', markerError);
-          }
-          
-          // Phương pháp 1: Sử dụng Sharing để chia sẻ marker file (phương pháp đáng tin cậy nhất)
-          const shareResult = await Sharing.isAvailableAsync();
-          if (shareResult) {
-            console.log('Using Sharing to open folder with marker file');
-            try {
-              await Sharing.shareAsync(markerFilePath, {
-                UTI: 'public.plain-text',
-                dialogTitle: 'Mở thư mục Notes trong Files App'
-              });
-              return;
-            } catch (shareError) {
-              console.log('Failed to share marker file:', shareError);
-            }
-          }
-          
-          // Phương pháp 2: Thử URL scheme với nhiều trình tự khác nhau
-          if (folderPath.startsWith('file://')) {
-            // Chuẩn bị đường dẫn
-            const cleanPath = folderPath.replace('file://', '');
-            console.log('Clean iOS path:', cleanPath);
-            
-            // Thử các URL scheme theo thứ tự độ tin cậy
-            const urlSchemes = [
-              { scheme: `shareddocuments://${cleanPath}`, name: 'Files App (SharedDocuments)' },
-              { scheme: `files://${cleanPath}`, name: 'Files App (Direct)' },
-              { scheme: `documents://${cleanPath}`, name: 'Documents App' }
-            ];
-            
-            // Thử từng URL scheme một
-            for (const {scheme, name} of urlSchemes) {
-              console.log(`Trying ${name} URL:`, scheme);
-              try {
-                const canOpen = await Linking.canOpenURL(scheme);
-                if (canOpen) {
-                  console.log(`Opening with ${name}`);
-                  await Linking.openURL(scheme);
-                  return;
-                }
-              } catch (urlError) {
-                console.log(`Failed with ${name}:`, urlError);
+            await IntentLauncher.startActivityAsync('android.intent.action.OPEN_DOCUMENT_TREE', {
+              extra: {
+                'android.provider.extra.INITIAL_URI': contentUri
               }
-            }
-            
-            // Thử mở Files app chung nếu không mở được thư mục cụ thể
-            console.log('Trying to open Files app generally');
-            try {
-              await Linking.openURL('shareddocuments://');
-              return;
-            } catch (generalError) {
-              console.log('Failed to open Files app:', generalError);
-            }
-          }
-          
-          // Phương pháp 3: Thử chia sẻ thư mục trực tiếp nếu không chia sẻ được file
-          try {
-            console.log('Trying to share folder directly');
-            await Sharing.shareAsync(folderPath, {
-              UTI: 'public.folder',
-              dialogTitle: 'Mở thư mục Notes trong Files App'
             });
-            return;
-          } catch (shareFolderError) {
-            console.log('Failed to share folder:', shareFolderError);
+          } catch (intentError) {
+            await IntentLauncher.startActivityAsync('android.intent.action.OPEN_DOCUMENT_TREE', {});
           }
-          
-          // Phương pháp 4: Hiển thị hướng dẫn chi tiết với giao diện thân thiện
-          Alert.alert(
-            '📱 Mở thư mục Notes',
-            `Đã tạo file đánh dấu để giúp bạn tìm thư mục. Vui lòng làm theo hướng dẫn:
+        }
+      } else if (Platform.OS === 'ios') {
+        console.log('Starting iOS file browser flow...');
+        
+        // Stage 1: Try URL schemes
+        console.log('Stage 1: Trying URL schemes...');
+        const urlSchemeSuccess = await tryiOSURLSchemes(folderPath);
+        if (urlSchemeSuccess) {
+          console.log('Successfully opened with URL scheme');
+          return;
+        }
+        
+        // Stage 2: Try marker file sharing
+        console.log('Stage 2: Creating and sharing marker file...');
+        const markerFileSuccess = await createAndShareMarkerFile(folderPath);
+        if (markerFileSuccess) {
+          console.log('Successfully shared marker file');
+          return;
+        }
+        
+        // Stage 3: Try direct folder sharing
+        console.log('Stage 3: Trying direct folder sharing...');
+        try {
+          await Sharing.shareAsync(folderPath, {
+            UTI: 'public.folder',
+            dialogTitle: 'Mở thư mục Notes trong Files App'
+          });
+          console.log('Successfully shared folder directly');
+          return;
+        } catch (shareFolderError) {
+          console.log('Failed to share folder directly:', shareFolderError);
+        }
+        
+        // Stage 4: Show comprehensive user guidance
+        console.log('Stage 4: Showing user guidance...');
+        Alert.alert(
+          '📱 Hướng dẫn mở thư mục Notes',
+          `SuperNote đã thử nhiều cách để mở Files app, nhưng iOS có thể chặn truy cập trực tiếp. Vui lòng làm theo hướng dẫn:
 
 📂 Cách tìm thư mục lưu trữ:
 1. Mở ứng dụng Files (Tệp)
-2. Chọn "On My iPhone/iPad" hoặc "SuperNote"
-3. Tìm file "📱_SuperNote_Folder_📱.txt"
-4. Thư mục chứa file này là nơi lưu ghi chú
+2. Chọn "On My iPhone/iPad" 
+3. Tìm thư mục hoặc file "📱_SuperNote_Folder_📱.txt"
+4. Đây là vị trí lưu trữ ghi chú của bạn
 
-📍 Đường dẫn: ${folderPath}`,
-            [
-              {
-                text: 'Mở Files App',
-                onPress: () => {
-                  Linking.openURL('shareddocuments://').catch(() => {
-                    Linking.openURL('files://').catch(() => {
-                      console.log('Cannot open Files app');
-                      Alert.alert(
-                        'Không thể mở Files App',
-                        'Vui lòng mở Files App thủ công và tìm thư mục SuperNote.'
-                      );
-                    });
-                  });
+💡 Mẹo: Bookmark thư mục này trong Files app để dễ tìm sau này!
+
+📍 Đường dẫn kỹ thuật: ${folderPath}`,
+          [
+            {
+              text: 'Thử mở Files App',
+              onPress: async () => {
+                try {
+                  // Try most reliable schemes first
+                  await Linking.openURL('shareddocuments://');
+                } catch {
+                  try {
+                    await Linking.openURL('files://');
+                  } catch {
+                    Alert.alert(
+                      'Không thể mở Files App tự động',
+                      'Vui lòng mở Files App thủ công từ Home screen.'
+                    );
+                  }
                 }
-              },
-              { text: 'Đóng', style: 'cancel' }
-            ]
-          );
-        } catch (error) {
-          console.error('Failed to open folder on iOS:', error);
-          Alert.alert(
-            '❌ Lỗi mở thư mục',
-            `Không thể mở thư mục lưu trữ. Vui lòng kiểm tra thủ công trong Files app.
-            
-📍 Đường dẫn: ${folderPath}
-🔍 Tìm file "📱_SuperNote_Folder_📱.txt" để xác định vị trí thư mục`,
-            [
-              {
-                text: 'Mở Files App',
-                onPress: () => Linking.openURL('shareddocuments://').catch(() => {})
-              },
-              { text: 'Đóng', style: 'cancel' }
-            ]
-          );
-        }
+              }
+            },
+            { text: 'Đã hiểu', style: 'cancel' }
+          ]
+        );
       } else {
-        Alert.alert('Không được hỗ trợ', 'Tính năng này chỉ được hỗ trợ trên thiết bị di động.');
+        Alert.alert(
+          'Không được hỗ trợ', 
+          'Tính năng mở thư mục chỉ được hỗ trợ trên iOS và Android.'
+        );
       }
     } catch (error) {
       console.error('Failed to open folder:', error);
       Alert.alert(
-        'Lỗi',
-        'Không thể mở thư mục trong trình quản lý tệp. Thư mục có thể không truy cập được.'
+        'Lỗi mở thư mục',
+        `Không thể mở thư mục trong trình quản lý tệp. 
+        
+Vui lòng kiểm tra:
+• Thư mục có tồn tại không
+• App có quyền truy cập storage
+• Thử restart app nếu cần
+
+Đường dẫn: ${folderPath}`
       );
     }
   };
