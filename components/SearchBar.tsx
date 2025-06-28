@@ -8,7 +8,11 @@ interface SearchBarProps {
   placeholder?: string;
 }
 
-export function SearchBar({ value, onChangeText, placeholder = 'Search...' }: SearchBarProps) {
+export function SearchBar({
+  value,
+  onChangeText,
+  placeholder = 'Search...',
+}: SearchBarProps) {
   return (
     <View style={styles.container}>
       <Search size={20} color="#9CA3AF" style={styles.icon} />

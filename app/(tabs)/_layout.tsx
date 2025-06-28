@@ -1,5 +1,11 @@
 import { Tabs } from 'expo-router';
-import { Chrome as Home, FileText, Settings, Plus, HardDrive } from 'lucide-react-native';
+import {
+  Chrome as Home,
+  FileText,
+  Settings,
+  Plus,
+  HardDrive,
+} from 'lucide-react-native';
 
 export default function TabLayout() {
   return (
@@ -20,14 +26,13 @@ export default function TabLayout() {
           fontSize: 12,
           fontWeight: '600',
         },
-      }}>
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ size, color }) => (
-            <Home size={size} color={color} />
-          ),
+          tabBarIcon: ({ size, color }) => <Home size={size} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -43,9 +48,7 @@ export default function TabLayout() {
         name="create"
         options={{
           title: 'Create',
-          tabBarIcon: ({ size, color }) => (
-            <Plus size={size} color={color} />
-          ),
+          tabBarIcon: ({ size, color }) => <Plus size={size} color={color} />,
         }}
       />
       <Tabs.Screen

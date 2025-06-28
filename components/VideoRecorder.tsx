@@ -1,310 +1,402 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, memo } from 'react';
 import {
   View,
   TouchableOpacity,
   Text,
   StyleSheet,
   Alert,
-  Platform,
   Dimensions,
+  ActivityIndicator,
+  StatusBar,
 } from 'react-native';
-import { Video, VideoView, Circle, Square } from 'lucide-react-native';
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+import {
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  Maximize2,
+  X,
+} from 'lucide-react-native';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import * as Haptics from 'expo-haptics';
-import { VideoService } from '../services/videoService';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
-const { width } = Dimensions.get('window');
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-interface VideoRecorderProps {
-  onVideoRecorded: (videoUri: string) => void;
-  isRecording: boolean;
-  onRecordingStateChange: (isRecording: boolean) => void;
+interface VideoPlayerProps {
+  videoUri: string;
+  style?: any;
+  autoPlay?: boolean;
+  showControls?: boolean;
+  onError?: (error: string) => void;
 }
 
-export function VideoRecorder({
-  onVideoRecorded,
-  isRecording,
-  onRecordingStateChange,
-}: VideoRecorderProps) {
-  const [facing, setFacing] = useState<CameraType>('back');
-  const [permission, requestPermission] = useCameraPermissions();
-  const [recordingDuration, setRecordingDuration] = useState(0);
-  const cameraRef = useRef<CameraView>(null);
-  const durationInterval = useRef<number | null>(null);
-
-  const requestPermissions = async () => {
-    try {
-      if (!permission?.granted) {
-        const result = await requestPermission();
-        return result.granted;
-      }
-      return true;
-    } catch (error) {
-      console.error('Failed to request camera permission:', error);
-      return false;
+function VideoPlayerComponent({
+  videoUri,
+  style,
+  autoPlay = false,
+  showControls = true,
+  onError,
+}: VideoPlayerProps) {
+  const player = useVideoPlayer(videoUri, (player) => {
+    if (autoPlay) {
+      player.play();
     }
-  };
+  });
+  const [isPlaying, setIsPlaying] = useState(autoPlay);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [duration, setDuration] = useState(0);
+  const [position, setPosition] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showControlsOverlay, setShowControlsOverlay] = useState(true);
 
-  const startRecording = async () => {
-    try {
-      const hasPermission = await requestPermissions();
-      if (!hasPermission) {
-        Alert.alert('Permission Required', 'Please grant camera access to record videos');
-        return;
-      }
+  const videoRef = useRef<VideoView>(null);
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-      if (!cameraRef.current) {
-        Alert.alert('Error', 'Camera not ready');
-        return;
-      }
-
-      const videoRecording = await cameraRef.current.recordAsync({
-        maxDuration: 300, // 5 minutes max
-        quality: '720p',
-      });
-
-      if (videoRecording?.uri) {
-        try {
-          const persistentUri = await VideoService.moveVideoToPersistentStorage(videoRecording.uri);
-          onVideoRecorded(persistentUri);
-        } catch (error) {
-          console.error('Failed to save video:', error);
-          Alert.alert('Error', 'Failed to save video recording');
-          return;
+  useEffect(() => {
+    const playingSubscription = player.addListener(
+      'playingChange',
+      (isPlaying) => {
+        setIsPlaying(isPlaying);
+        if (!isPlaying) {
+          setShowControlsOverlay(true);
         }
+      },
+    );
+
+    const mutedSubscription = player.addListener('mutedChange', (isMuted) => {
+      setIsMuted(isMuted);
+    });
+
+    const progressSubscription = player.addListener('progress', (progress) => {
+      setPosition(progress.positionMillis ?? 0);
+      setDuration(progress.durationMillis ?? 0);
+    });
+
+    const errorSubscription = player.addListener('error', (error) => {
+      console.error('Video playback error:', error);
+      onError?.('Lỗi phát video: ' + error.message);
+    });
+
+    const loadSubscription = player.addListener('load', (status) => {
+      setIsLoading(false);
+      if (status) {
+        setDuration(status.duration ?? 0);
       }
+    });
 
-      onRecordingStateChange(true);
-      setRecordingDuration(0);
+    return () => {
+      playingSubscription.remove();
+      mutedSubscription.remove();
+      progressSubscription.remove();
+      errorSubscription.remove();
+      loadSubscription.remove();
+    };
+  }, [player, onError]);
 
-      // Start duration timer
-      durationInterval.current = setInterval(() => {
-        setRecordingDuration(prev => prev + 1);
-      }, 1000);
-
-      if (Platform.OS !== 'web') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
-    } catch (error) {
-      console.error('Failed to start video recording:', error);
-      Alert.alert('Error', 'Failed to start video recording');
+  const hideControlsAfterDelay = () => {
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
     }
+
+    controlsTimeoutRef.current = setTimeout(() => {
+      if (isPlaying) {
+        setShowControlsOverlay(false);
+      }
+    }, 3000);
   };
 
-  const stopRecording = async () => {
+  const showControlsTemporarily = () => {
+    setShowControlsOverlay(true);
+    hideControlsAfterDelay();
+  };
+
+  useEffect(() => {
+    if (isPlaying && showControls) {
+      hideControlsAfterDelay();
+    } else {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+      setShowControlsOverlay(true);
+    }
+
+    return () => {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    };
+  }, [isPlaying, showControls]);
+
+  const togglePlayPause = async () => {
     try {
-      if (!cameraRef.current) return;
-
-      await cameraRef.current.stopRecording();
-      
-      onRecordingStateChange(false);
-      setRecordingDuration(0);
-
-      // Clear duration timer
-      if (durationInterval.current) {
-        clearInterval(durationInterval.current);
-        durationInterval.current = null;
+      if (isPlaying) {
+        player.pause();
+      } else {
+        player.play();
       }
-
-      if (Platform.OS !== 'web') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
-      console.error('Failed to stop video recording:', error);
-      Alert.alert('Error', 'Failed to stop video recording');
+      console.error('Error toggling play/pause:', error);
+      onError?.('Không thể phát/dừng video');
     }
   };
 
-  const toggleCameraFacing = () => {
-    setFacing(current => (current === 'back' ? 'front' : 'back'));
+  const toggleMute = async () => {
+    try {
+      player.setMuted(!isMuted);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (error) {
+      console.error('Error toggling mute:', error);
+    }
   };
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  const seekTo = async (seekPosition: number) => {
+    try {
+      const seekTime = (seekPosition / 100) * duration;
+      player.seek(seekTime);
+    } catch (error) {
+      console.error('Error seeking:', error);
+    }
   };
 
-  if (!permission) {
-    return (
-      <View style={styles.permissionContainer}>
-        <Text style={styles.permissionText}>Requesting camera permission...</Text>
-      </View>
-    );
-  }
+  const toggleFullscreen = async () => {
+    try {
+      if (isFullscreen) {
+        await ScreenOrientation.lockAsync(
+          ScreenOrientation.OrientationLock.PORTRAIT_UP,
+        );
+        StatusBar.setHidden(false);
+      } else {
+        await ScreenOrientation.lockAsync(
+          ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT,
+        );
+        StatusBar.setHidden(true);
+      }
+      setIsFullscreen(!isFullscreen);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (error) {
+      console.error('Error toggling fullscreen:', error);
+      Alert.alert('Lỗi', 'Không thể thay đổi chế độ toàn màn hình.');
+    }
+  };
 
-  if (!permission.granted) {
-    return (
-      <View style={styles.permissionContainer}>
-        <Text style={styles.permissionText}>Camera access is required to record videos</Text>
-        <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-          <Text style={styles.permissionButtonText}>Grant Permission</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  const formatTime = (timeInMs: number) => {
+    const totalSeconds = Math.floor(timeInMs / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const progressPercentage = duration > 0 ? (position / duration) * 100 : 0;
+
+  const videoContainerStyle = isFullscreen
+    ? styles.fullscreenContainer
+    : [styles.videoContainer, style];
 
   return (
-    <View style={styles.container}>
-      <View style={styles.cameraContainer}>
-        <CameraView
-          ref={cameraRef}
-          style={styles.camera}
-          facing={facing}
-          mode="video"
-        >
-          <View style={styles.cameraOverlay}>
-            {/* Camera Controls */}
-            <View style={styles.topControls}>
-              <TouchableOpacity style={styles.flipButton} onPress={toggleCameraFacing}>
-                <Text style={styles.flipButtonText}>Flip</Text>
+    <View style={videoContainerStyle}>
+      <TouchableOpacity
+        style={styles.videoWrapper}
+        activeOpacity={1}
+        onPress={showControlsTemporarily}
+      >
+        <VideoView
+          ref={videoRef}
+          style={isFullscreen ? styles.fullscreenVideo : styles.video}
+          player={player}
+          contentFit="contain"
+          isLooping={false}
+          isMuted={isMuted}
+        />
+
+        {/* Loading Indicator */}
+        {isLoading && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color="#FFFFFF" />
+          </View>
+        )}
+
+        {/* Controls Overlay */}
+        {showControls && showControlsOverlay && !isLoading && (
+          <View style={styles.controlsOverlay}>
+            {/* Top Controls */}
+            {isFullscreen && (
+              <View style={styles.topControls}>
+                <TouchableOpacity
+                  style={styles.controlButton}
+                  onPress={toggleFullscreen}
+                >
+                  <X size={24} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Center Play/Pause */}
+            <View style={styles.centerControls}>
+              <TouchableOpacity
+                style={styles.playPauseButton}
+                onPress={togglePlayPause}
+              >
+                {isPlaying ? (
+                  <Pause size={40} color="#FFFFFF" />
+                ) : (
+                  <Play size={40} color="#FFFFFF" />
+                )}
               </TouchableOpacity>
-              {isRecording && (
-                <View style={styles.recordingIndicator}>
-                  <Circle size={8} color="#FF3B30" fill="#FF3B30" />
-                  <Text style={styles.recordingText}>REC {formatDuration(recordingDuration)}</Text>
-                </View>
-              )}
             </View>
 
             {/* Bottom Controls */}
             <View style={styles.bottomControls}>
-              <TouchableOpacity
-                style={[
-                  styles.recordButton,
-                  isRecording && styles.recordButtonActive,
-                ]}
-                onPress={isRecording ? stopRecording : startRecording}
-              >
-                {isRecording ? (
-                  <Square size={30} color="#FFFFFF" />
-                ) : (
-                  <Circle size={30} color="#FFFFFF" fill="#FF3B30" />
+              {/* Progress Bar */}
+              <View style={styles.progressContainer}>
+                <Text style={styles.timeText}>{formatTime(position)}</Text>
+
+                <View style={styles.progressBar}>
+                  <View style={styles.progressTrack}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        { width: `${progressPercentage}%` },
+                      ]}
+                    />
+                  </View>
+                </View>
+
+                <Text style={styles.timeText}>{formatTime(duration)}</Text>
+              </View>
+
+              {/* Control Buttons */}
+              <View style={styles.controlsRow}>
+                <TouchableOpacity
+                  style={styles.controlButton}
+                  onPress={toggleMute}
+                >
+                  {isMuted ? (
+                    <VolumeX size={20} color="#FFFFFF" />
+                  ) : (
+                    <Volume2 size={20} color="#FFFFFF" />
+                  )}
+                </TouchableOpacity>
+
+                {!isFullscreen && (
+                  <TouchableOpacity
+                    style={styles.controlButton}
+                    onPress={toggleFullscreen}
+                  >
+                    <Maximize2 size={20} color="#FFFFFF" />
+                  </TouchableOpacity>
                 )}
-              </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </CameraView>
-      </View>
-
-      <View style={styles.infoContainer}>
-        <Text style={styles.infoText}>
-          {isRecording ? 'Recording video...' : 'Tap the red button to start recording'}
-        </Text>
-        <Text style={styles.hintText}>
-          Maximum recording time: 5 minutes
-        </Text>
-      </View>
+        )}
+      </TouchableOpacity>
     </View>
   );
 }
 
+export const VideoPlayer = memo(VideoPlayerComponent);
+
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 16,
-    marginVertical: 8,
-  },
-  permissionContainer: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginVertical: 8,
-  },
-  permissionText: {
-    fontSize: 16,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  permissionButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  permissionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  cameraContainer: {
+  videoContainer: {
+    backgroundColor: '#000000',
     borderRadius: 8,
     overflow: 'hidden',
-    marginBottom: 12,
+    aspectRatio: 16 / 9,
   },
-  camera: {
-    width: width - 64,
-    height: (width - 64) * 0.75, // 4:3 aspect ratio
+  fullscreenContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#000000',
+    zIndex: 1000,
   },
-  cameraOverlay: {
+  videoWrapper: {
     flex: 1,
+    position: 'relative',
+  },
+  video: {
+    flex: 1,
+  },
+  fullscreenVideo: {
+    width: screenHeight, // In landscape, width becomes height
+    height: screenWidth, // and height becomes width
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
+  controlsOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'space-between',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
   topControls: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
     padding: 16,
   },
-  flipButton: {
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  flipButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  recordingIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  recordingText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
-    fontFamily: 'monospace',
-  },
-  bottomControls: {
-    alignItems: 'center',
-    paddingBottom: 20,
-  },
-  recordButton: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderWidth: 4,
-    borderColor: '#FFFFFF',
+  centerControls: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  recordButtonActive: {
-    backgroundColor: 'rgba(255, 59, 48, 0.8)',
-  },
-  infoContainer: {
+  playPauseButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  infoText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#1F2937',
-    textAlign: 'center',
+  bottomControls: {
+    padding: 16,
   },
-  hintText: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginTop: 4,
+  progressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
   },
-}); 
+  progressBar: {
+    flex: 1,
+    marginHorizontal: 12,
+  },
+  progressTrack: {
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 1.5,
+  },
+  progressFill: {
+    height: 3,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 1.5,
+  },
+  timeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'monospace',
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  controlButton: {
+    padding: 8,
+    marginLeft: 16,
+  },
+});

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,19 +11,19 @@ import {
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { 
-  HardDrive, 
-  Folder, 
-  Smartphone, 
-  Cloud, 
-  CircleCheck as CheckCircle, 
-  TriangleAlert as AlertTriangle, 
-  RefreshCw, 
-  FolderOpen, 
+import {
+  HardDrive,
+  Folder,
+  Smartphone,
+  Cloud,
+  CircleCheck as CheckCircle,
+  TriangleAlert as AlertTriangle,
+  RefreshCw,
+  FolderOpen,
   Info,
   Zap,
   Shield,
-  Wifi
+  Wifi,
 } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
@@ -57,20 +57,17 @@ export default function StorageScreen() {
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
   const [iosOptimizations, setIosOptimizations] = useState(false);
-  
-  const { storageInfo, refreshStorageInfo, loading: storageInfoLoading } = useStorageInfo();
 
-  const isIOS16Plus = Platform.OS === 'ios' && parseInt(Platform.Version as string, 10) >= 16;
+  const {
+    storageInfo,
+    refreshStorageInfo,
+    loading: storageInfoLoading,
+  } = useStorageInfo();
 
-  useEffect(() => {
-    loadStorageOptions();
-    loadCurrentLocation();
-    if (isIOS16Plus) {
-      setupiOSOptimizations();
-    }
-  }, []);
+  const isIOS16Plus =
+    Platform.OS === 'ios' && parseInt(Platform.Version as string, 10) >= 16;
 
-  const setupiOSOptimizations = async () => {
+  const setupiOSOptimizations = useCallback(async () => {
     try {
       await iOSStorageService.optimizeForBattery();
       await iOSStorageService.setupiOSBackgroundSync();
@@ -78,17 +75,18 @@ export default function StorageScreen() {
     } catch (error) {
       console.warn('iOS optimizations setup failed:', error);
     }
-  };
+  }, []);
 
-  const loadStorageOptions = async () => {
+  const loadStorageOptions = useCallback(async () => {
     try {
       setLoading(true);
       let options = await getAvailableStorageOptions();
-      
+
       // Add iOS-specific options if on iOS 16+
       if (isIOS16Plus) {
-        const iosOptions = await iOSStorageService.getiOSSpecificStorageOptions();
-        const convertedOptions = iosOptions.map(iosOption => ({
+        const iosOptions =
+          await iOSStorageService.getiOSSpecificStorageOptions();
+        const convertedOptions = iosOptions.map((iosOption) => ({
           id: iosOption.id,
           name: iosOption.name,
           path: iosOption.path,
@@ -105,7 +103,7 @@ export default function StorageScreen() {
         }));
         options = [...options, ...convertedOptions];
       }
-      
+
       setStorageOptions(options);
     } catch (error) {
       console.error('Failed to load storage options:', error);
@@ -113,25 +111,39 @@ export default function StorageScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isIOS16Plus]);
 
-  const getIconForType = (type: string): any => {
-    switch (type) {
-      case 'app_documents': return Folder;
-      case 'app_support': return Smartphone;
-      case 'icloud_drive': return Cloud;
-      case 'files_app': return FolderOpen;
-      case 'shared_container': return Shield;
-      default: return HardDrive;
-    }
-  };
-
-  const loadCurrentLocation = async () => {
+  const loadCurrentLocation = useCallback(async () => {
     try {
       const location = await storageLocationService.getCurrentStorageLocation();
       setCurrentLocation(location);
     } catch (error) {
       console.error('Failed to load current location:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStorageOptions();
+    loadCurrentLocation();
+    if (isIOS16Plus) {
+      setupiOSOptimizations();
+    }
+  }, [isIOS16Plus, loadCurrentLocation, loadStorageOptions, setupiOSOptimizations]);
+
+  const getIconForType = (type: string): any => {
+    switch (type) {
+      case 'app_documents':
+        return Folder;
+      case 'app_support':
+        return Smartphone;
+      case 'icloud_drive':
+        return Cloud;
+      case 'files_app':
+        return FolderOpen;
+      case 'shared_container':
+        return Shield;
+      default:
+        return HardDrive;
     }
   };
 
@@ -146,21 +158,27 @@ export default function StorageScreen() {
       type: 'internal',
       available: true,
       icon: Smartphone,
-      description: isIOS16Plus 
+      description: isIOS16Plus
         ? 'Default secure storage with iOS 16 optimizations'
         : 'Default secure storage within the app',
-      iosFeatures: isIOS16Plus ? {
-        batteryOptimized: true,
-        backgroundSync: true,
-      } : undefined,
+      iosFeatures: isIOS16Plus
+        ? {
+            batteryOptimized: true,
+            backgroundSync: true,
+          }
+        : undefined,
     });
 
     // iOS 16+ enhanced documents folder
     if (isIOS16Plus && FileSystem.documentDirectory) {
       try {
-        const detailedInfo = await iOSStorageService.getDetailedStorageInfo(FileSystem.documentDirectory);
+        const detailedInfo = await iOSStorageService.getDetailedStorageInfo(
+          FileSystem.documentDirectory,
+        );
         if (detailedInfo) {
-          options[0].freeSpace = iOSStorageService.formatBytes(detailedInfo.freeSpace);
+          options[0].freeSpace = iOSStorageService.formatBytes(
+            detailedInfo.freeSpace,
+          );
           options[0].iosFeatures = {
             ...options[0].iosFeatures,
             iCloudSync: true,
@@ -187,21 +205,22 @@ export default function StorageScreen() {
             await handleLocationChange(selectedPath, option.name);
           }
           break;
-        
+
         case 'icloud_drive':
           Alert.alert(
             'iCloud Drive',
             'This will store your notes in iCloud Drive for automatic sync across your devices. Continue?',
             [
               { text: 'Cancel', style: 'cancel' },
-              { 
-                text: 'Enable iCloud', 
-                onPress: () => handleLocationChange('icloud_drive', option.name)
+              {
+                text: 'Enable iCloud',
+                onPress: () =>
+                  handleLocationChange('icloud_drive', option.name),
               },
-            ]
+            ],
           );
           break;
-        
+
         default:
           await handleLocationChange(option.path, option.name);
           break;
@@ -209,8 +228,8 @@ export default function StorageScreen() {
     } catch (error) {
       console.error('iOS location selection failed:', error);
       Alert.alert(
-        'Error', 
-        'Failed to set up iOS storage location. Please try again or contact support.'
+        'Error',
+        'Failed to set up iOS storage location. Please try again or contact support.',
       );
     } finally {
       setChecking(false);
@@ -222,9 +241,15 @@ export default function StorageScreen() {
       let isValid = false;
 
       if (isIOS16Plus && path.includes('icloud_drive')) {
-        isValid = await iOSStorageService.validateiOSStorageLocation(path, 'icloud_drive');
+        isValid = await iOSStorageService.validateiOSStorageLocation(
+          path,
+          'icloud_drive',
+        );
       } else if (isIOS16Plus && path.includes('files_app')) {
-        isValid = await iOSStorageService.validateiOSStorageLocation(path, 'files_app');
+        isValid = await iOSStorageService.validateiOSStorageLocation(
+          path,
+          'files_app',
+        );
       } else {
         isValid = await storageLocationService.validateStorageLocation(path);
       }
@@ -232,17 +257,17 @@ export default function StorageScreen() {
       if (isValid) {
         await storageLocationService.setStorageLocation(path);
         setCurrentLocation(path);
-        
+
         Alert.alert(
           'Success',
-          `Storage location changed to ${name}. ${isIOS16Plus ? 'iOS 16 optimizations are active.' : ''}`
+          `Storage location changed to ${name}. ${isIOS16Plus ? 'iOS 16 optimizations are active.' : ''}`,
         );
-        
+
         await refreshStorageInfo();
       } else {
         Alert.alert(
           'Invalid Location',
-          'Unable to access this storage location. Please check permissions and try again.'
+          'Unable to access this storage location. Please check permissions and try again.',
         );
       }
     } catch (error) {
@@ -255,32 +280,34 @@ export default function StorageScreen() {
     try {
       if (Platform.OS === 'web') {
         Alert.alert(
-          'Web Platform Limitation', 
-          'File browser is not supported on web platform.'
+          'Web Platform Limitation',
+          'File browser is not supported on web platform.',
         );
         return;
       }
 
       // Get current storage location
-      const currentStoragePath = await storageLocationService.getCurrentStorageLocation();
-      
+      const currentStoragePath =
+        await storageLocationService.getCurrentStorageLocation();
+
       // Ensure the directory exists
       const dirInfo = await FileSystem.getInfoAsync(currentStoragePath);
       if (!dirInfo.exists) {
-        await FileSystem.makeDirectoryAsync(currentStoragePath, { intermediates: true });
+        await FileSystem.makeDirectoryAsync(currentStoragePath, {
+          intermediates: true,
+        });
       }
-      
+
       // Log for debugging
       console.log('Opening storage location:', currentStoragePath);
-      
+
       // Open current storage folder in file manager
       await openFolderInFileManager(currentStoragePath);
-      
     } catch (error) {
       console.error('Failed to open current storage location:', error);
       Alert.alert(
         'Error',
-        'Could not open the current storage folder. Please check if the location is accessible.'
+        'Could not open the current storage folder. Please check if the location is accessible.',
       );
     }
   };
@@ -289,8 +316,8 @@ export default function StorageScreen() {
     try {
       if (Platform.OS === 'web') {
         Alert.alert(
-          'Web Platform Limitation', 
-          'Custom storage locations are not supported on web. Please use the default internal storage.'
+          'Web Platform Limitation',
+          'Custom storage locations are not supported on web. Please use the default internal storage.',
         );
         return;
       }
@@ -319,9 +346,9 @@ export default function StorageScreen() {
       console.error('Custom location selection failed:', error);
       Alert.alert(
         'Error',
-        isIOS16Plus 
+        isIOS16Plus
           ? 'Failed to access Files app. Please ensure you have granted necessary permissions.'
-          : 'Failed to select storage location. Please try again.'
+          : 'Failed to select storage location. Please try again.',
       );
     }
   };
@@ -329,18 +356,24 @@ export default function StorageScreen() {
   // Helper function to try iOS URL schemes systematically
   const tryiOSURLSchemes = async (folderPath: string): Promise<boolean> => {
     if (!folderPath.startsWith('file://')) return false;
-    
+
     const cleanPath = folderPath.replace('file://', '');
     console.log('Clean iOS path:', cleanPath);
-    
+
     // Define URL schemes in order of reliability
     const urlSchemes = [
       { scheme: 'shareddocuments://', name: 'Files App (General)' },
-      { scheme: `shareddocuments://${encodeURIComponent(cleanPath)}`, name: 'Files App (with path)' },
+      {
+        scheme: `shareddocuments://${encodeURIComponent(cleanPath)}`,
+        name: 'Files App (with path)',
+      },
       { scheme: 'files://', name: 'Files App (Direct)' },
-      { scheme: `files://${encodeURIComponent(cleanPath)}`, name: 'Files App (Direct with path)' }
+      {
+        scheme: `files://${encodeURIComponent(cleanPath)}`,
+        name: 'Files App (Direct with path)',
+      },
     ];
-    
+
     // Try each URL scheme
     for (const { scheme, name } of urlSchemes) {
       console.log(`Trying ${name}:`, scheme);
@@ -355,12 +388,14 @@ export default function StorageScreen() {
         console.log(`Failed with ${name}:`, urlError);
       }
     }
-    
+
     return false;
   };
 
   // Helper function to create and share marker file
-  const createAndShareMarkerFile = async (folderPath: string): Promise<boolean> => {
+  const createAndShareMarkerFile = async (
+    folderPath: string,
+  ): Promise<boolean> => {
     try {
       // Create user-friendly marker file
       const markerFilePath = `${folderPath}/📱_SuperNote_Folder_📱.txt`;
@@ -378,24 +413,24 @@ export default function StorageScreen() {
 2. Chọn "On My iPhone/iPad" 
 3. Tìm file "📱_SuperNote_Folder_📱.txt"
 4. Thư mục chứa file này là thư mục lưu trữ ghi chú`;
-      
+
       await FileSystem.writeAsStringAsync(markerFilePath, markerContent);
       console.log('Created marker file:', markerFilePath);
-      
+
       // Try sharing the marker file
       const shareResult = await Sharing.isAvailableAsync();
       if (shareResult) {
         console.log('Sharing marker file to help user locate folder');
         await Sharing.shareAsync(markerFilePath, {
           UTI: 'public.plain-text',
-          dialogTitle: 'Mở thư mục Notes trong Files App'
+          dialogTitle: 'Mở thư mục Notes trong Files App',
         });
         return true;
       }
     } catch (error) {
       console.log('Failed to create/share marker file:', error);
     }
-    
+
     return false;
   };
 
@@ -403,12 +438,14 @@ export default function StorageScreen() {
   const openFolderInFileManager = async (folderPath: string) => {
     try {
       console.log('Opening folder in file manager:', folderPath);
-      
+
       if (Platform.OS === 'android') {
         // Android implementation (working well)
         const dirInfo = await FileSystem.getInfoAsync(folderPath);
         if (!dirInfo.exists) {
-          await FileSystem.makeDirectoryAsync(folderPath, { intermediates: true });
+          await FileSystem.makeDirectoryAsync(folderPath, {
+            intermediates: true,
+          });
           console.log('Created directory:', folderPath);
         }
 
@@ -416,28 +453,37 @@ export default function StorageScreen() {
         try {
           contentUri = await FileSystem.getContentUriAsync(folderPath);
           console.log('Content URI:', contentUri);
-          
-          await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-            data: contentUri,
-            flags: 1,  // FLAG_GRANT_READ_URI_PERMISSION
-            type: 'resource/folder'
-          });
+
+          await IntentLauncher.startActivityAsync(
+            'android.intent.action.VIEW',
+            {
+              data: contentUri,
+              flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+              type: 'resource/folder',
+            },
+          );
         } catch (err) {
           console.error('Error opening folder directly:', err);
-          
+
           try {
-            await IntentLauncher.startActivityAsync('android.intent.action.OPEN_DOCUMENT_TREE', {
-              extra: {
-                'android.provider.extra.INITIAL_URI': contentUri
-              }
-            });
+            await IntentLauncher.startActivityAsync(
+              'android.intent.action.OPEN_DOCUMENT_TREE',
+              {
+                extra: {
+                  'android.provider.extra.INITIAL_URI': contentUri,
+                },
+              },
+            );
           } catch (intentError) {
-            await IntentLauncher.startActivityAsync('android.intent.action.OPEN_DOCUMENT_TREE', {});
+            await IntentLauncher.startActivityAsync(
+              'android.intent.action.OPEN_DOCUMENT_TREE',
+              {},
+            );
           }
         }
       } else if (Platform.OS === 'ios') {
         console.log('Starting iOS file browser flow...');
-        
+
         // Stage 1: Try URL schemes
         console.log('Stage 1: Trying URL schemes...');
         const urlSchemeSuccess = await tryiOSURLSchemes(folderPath);
@@ -445,7 +491,7 @@ export default function StorageScreen() {
           console.log('Successfully opened with URL scheme');
           return;
         }
-        
+
         // Stage 2: Try marker file sharing
         console.log('Stage 2: Creating and sharing marker file...');
         const markerFileSuccess = await createAndShareMarkerFile(folderPath);
@@ -453,20 +499,20 @@ export default function StorageScreen() {
           console.log('Successfully shared marker file');
           return;
         }
-        
+
         // Stage 3: Try direct folder sharing
         console.log('Stage 3: Trying direct folder sharing...');
         try {
           await Sharing.shareAsync(folderPath, {
             UTI: 'public.folder',
-            dialogTitle: 'Mở thư mục Notes trong Files App'
+            dialogTitle: 'Mở thư mục Notes trong Files App',
           });
           console.log('Successfully shared folder directly');
           return;
         } catch (shareFolderError) {
           console.log('Failed to share folder directly:', shareFolderError);
         }
-        
+
         // Stage 4: Show comprehensive user guidance
         console.log('Stage 4: Showing user guidance...');
         Alert.alert(
@@ -495,19 +541,19 @@ export default function StorageScreen() {
                   } catch {
                     Alert.alert(
                       'Không thể mở Files App tự động',
-                      'Vui lòng mở Files App thủ công từ Home screen.'
+                      'Vui lòng mở Files App thủ công từ Home screen.',
                     );
                   }
                 }
-              }
+              },
             },
-            { text: 'Đã hiểu', style: 'cancel' }
-          ]
+            { text: 'Đã hiểu', style: 'cancel' },
+          ],
         );
       } else {
         Alert.alert(
-          'Không được hỗ trợ', 
-          'Tính năng mở thư mục chỉ được hỗ trợ trên iOS và Android.'
+          'Không được hỗ trợ',
+          'Tính năng mở thư mục chỉ được hỗ trợ trên iOS và Android.',
         );
       }
     } catch (error) {
@@ -521,16 +567,16 @@ Vui lòng kiểm tra:
 • App có quyền truy cập storage
 • Thử restart app nếu cần
 
-Đường dẫn: ${folderPath}`
+Đường dẫn: ${folderPath}`,
       );
     }
   };
 
-
   const renderStorageOption = (option: StorageOption) => {
     const isSelected = currentLocation === option.path;
     const IconComponent = option.icon;
-    const hasIosFeatures = option.iosFeatures && Object.keys(option.iosFeatures).length > 0;
+    const hasIosFeatures =
+      option.iosFeatures && Object.keys(option.iosFeatures).length > 0;
 
     return (
       <TouchableOpacity
@@ -546,12 +592,25 @@ Vui lòng kiểm tra:
         disabled={!option.available}
       >
         <View style={styles.optionLeft}>
-          <View style={[styles.iconContainer, !option.available && styles.disabledIcon]}>
-            <IconComponent size={24} color={isSelected ? '#007AFF' : '#6B7280'} />
+          <View
+            style={[
+              styles.iconContainer,
+              !option.available && styles.disabledIcon,
+            ]}
+          >
+            <IconComponent
+              size={24}
+              color={isSelected ? '#007AFF' : '#6B7280'}
+            />
           </View>
           <View style={styles.optionInfo}>
             <View style={styles.optionHeader}>
-              <Text style={[styles.optionName, !option.available && styles.disabledText]}>
+              <Text
+                style={[
+                  styles.optionName,
+                  !option.available && styles.disabledText,
+                ]}
+              >
                 {option.name}
               </Text>
               {isIOS16Plus && hasIosFeatures && (
@@ -561,7 +620,7 @@ Vui lòng kiểm tra:
               )}
             </View>
             <Text style={styles.optionDescription}>{option.description}</Text>
-            
+
             {/* iOS Features */}
             {hasIosFeatures && (
               <View style={styles.iosFeatures}>
@@ -585,22 +644,19 @@ Vui lòng kiểm tra:
                 )}
               </View>
             )}
-            
+
             {option.freeSpace && (
               <Text style={styles.optionStorage}>
-                Free: {option.freeSpace} {option.totalSpace && `/ ${option.totalSpace}`}
+                Free: {option.freeSpace}{' '}
+                {option.totalSpace && `/ ${option.totalSpace}`}
               </Text>
             )}
           </View>
         </View>
-        
+
         <View style={styles.optionRight}>
-          {isSelected && (
-            <CheckCircle size={20} color="#34C759" />
-          )}
-          {!option.available && (
-            <AlertTriangle size={20} color="#FF9500" />
-          )}
+          {isSelected && <CheckCircle size={20} color="#34C759" />}
+          {!option.available && <AlertTriangle size={20} color="#FF9500" />}
         </View>
       </TouchableOpacity>
     );
@@ -612,7 +668,9 @@ Vui lòng kiểm tra:
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#007AFF" />
           <Text style={styles.loadingText}>
-            {isIOS16Plus ? 'Loading iOS 16+ storage options...' : 'Loading storage options...'}
+            {isIOS16Plus
+              ? 'Loading iOS 16+ storage options...'
+              : 'Loading storage options...'}
           </Text>
         </View>
       </SafeAreaView>
@@ -652,11 +710,11 @@ Vui lòng kiểm tra:
               </View>
             )}
           </View>
-          
+
           <Text style={styles.currentPath} numberOfLines={2}>
             {currentLocation || 'Default internal storage'}
           </Text>
-          
+
           {storageInfo && (
             <View style={styles.storageStats}>
               <View style={styles.stat}>
@@ -680,10 +738,11 @@ Vui lòng kiểm tra:
           )}
 
           {Platform.OS === 'android' && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.openLocationButton}
               onPress={async () => {
-                const location = await storageLocationService.getCurrentStorageLocation();
+                const location =
+                  await storageLocationService.getCurrentStorageLocation();
                 openFolderInFileManager(location);
               }}
             >
@@ -702,7 +761,9 @@ Vui lòng kiểm tra:
               onPress={openCurrentStorageLocation}
             >
               <FolderOpen size={20} color="#FFFFFF" />
-              <Text style={styles.iosFileBrowserText}>Mở thư mục Notes hiện tại</Text>
+              <Text style={styles.iosFileBrowserText}>
+                Mở thư mục Notes hiện tại
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -715,12 +776,11 @@ Vui lòng kiểm tra:
               <Text style={styles.infoTitle}>iOS 16+ Enhanced Features</Text>
             </View>
             <Text style={styles.infoText}>
-              • Files app integration with security-scoped access{'\n'}
-              • iCloud Drive automatic synchronization{'\n'}
-              • Battery optimized background operations{'\n'}
-              • Enhanced file system performance{'\n'}
-              • Direct notes directory browser{'\n'}
-              • Improved security and privacy controls
+              • Files app integration with security-scoped access{'\n'}• iCloud
+              Drive automatic synchronization{'\n'}• Battery optimized
+              background operations{'\n'}• Enhanced file system performance
+              {'\n'}• Direct notes directory browser{'\n'}• Improved security
+              and privacy controls
             </Text>
           </View>
         )}
@@ -732,13 +792,12 @@ Vui lòng kiểm tra:
             <Text style={styles.infoTitle}>Storage Information</Text>
           </View>
           <Text style={styles.infoText}>
-            • Notes will be stored in selected location{'\n'}
-            • Changing location doesn't move existing notes{'\n'}
-            • Ensure selected location has sufficient space{'\n'}
-            {isIOS16Plus 
+            • Notes will be stored in selected location{'\n'}• Changing location
+            doesn&apos;t move existing notes{'\n'}• Ensure selected location has
+            sufficient space{'\n'}
+            {isIOS16Plus
               ? '• iOS 16+ provides enhanced security and sync features'
-              : '• External storage may require additional permissions'
-            }
+              : '• External storage may require additional permissions'}
           </Text>
         </View>
 
@@ -750,9 +809,9 @@ Vui lòng kiểm tra:
               <Text style={styles.sectionSubtitle}> (iOS 16+ Enhanced)</Text>
             )}
           </Text>
-          
+
           {storageOptions.map(renderStorageOption)}
-          
+
           {/* Browse Current Storage Location */}
           <TouchableOpacity
             style={styles.customLocationButton}
@@ -765,10 +824,9 @@ Vui lòng kiểm tra:
                 Mở thư mục Notes hiện tại
               </Text>
               <Text style={styles.customLocationSubtitle}>
-                {Platform.OS === 'web' 
+                {Platform.OS === 'web'
                   ? 'Không khả dụng trên nền tảng web'
-                  : 'Mở thư mục lưu trữ ghi chú hiện tại trong trình quản lý tệp'
-                }
+                  : 'Mở thư mục lưu trữ ghi chú hiện tại trong trình quản lý tệp'}
               </Text>
             </View>
           </TouchableOpacity>
@@ -782,15 +840,16 @@ Vui lòng kiểm tra:
             <Folder size={24} color="#007AFF" />
             <View style={styles.customLocationText}>
               <Text style={styles.customLocationTitle}>
-                {Platform.OS === 'ios' 
-                  ? (isIOS16Plus ? 'Chọn thư mục lưu trữ mới' : 'Chọn thư mục tùy chỉnh')
+                {Platform.OS === 'ios'
+                  ? isIOS16Plus
+                    ? 'Chọn thư mục lưu trữ mới'
+                    : 'Chọn thư mục tùy chỉnh'
                   : 'Chọn thư mục lưu trữ mới'}
               </Text>
               <Text style={styles.customLocationSubtitle}>
-                {Platform.OS === 'web' 
+                {Platform.OS === 'web'
                   ? 'Không khả dụng trên nền tảng web'
-                  : 'Chọn một thư mục khác để lưu trữ ghi chú của bạn'
-                }
+                  : 'Chọn một thư mục khác để lưu trữ ghi chú của bạn'}
               </Text>
             </View>
           </TouchableOpacity>
@@ -814,17 +873,25 @@ Vui lòng kiểm tra:
                         await storageLocationService.resetToDefault();
                         await loadCurrentLocation();
                         await refreshStorageInfo();
-                        Alert.alert('Success', 'Storage location reset to default.');
+                        Alert.alert(
+                          'Success',
+                          'Storage location reset to default.',
+                        );
                       } catch (error) {
-                        Alert.alert('Error', 'Failed to reset storage location.');
+                        Alert.alert(
+                          'Error',
+                          'Failed to reset storage location.',
+                        );
                       }
                     },
                   },
-                ]
+                ],
               );
             }}
           >
-            <Text style={styles.resetButtonText}>Reset to Default Location</Text>
+            <Text style={styles.resetButtonText}>
+              Reset to Default Location
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -833,10 +900,9 @@ Vui lòng kiểm tra:
           <View style={styles.checkingOverlay}>
             <ActivityIndicator size="small" color="#007AFF" />
             <Text style={styles.checkingText}>
-              {isIOS16Plus 
-                ? 'Validating iOS storage location...' 
-                : 'Validating storage location...'
-              }
+              {isIOS16Plus
+                ? 'Validating iOS storage location...'
+                : 'Validating storage location...'}
             </Text>
           </View>
         )}

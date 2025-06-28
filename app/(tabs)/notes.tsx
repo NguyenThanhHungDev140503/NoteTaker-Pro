@@ -41,22 +41,24 @@ export default function NotesScreen() {
     let filtered = searchQuery ? searchNotes(searchQuery) : notes;
 
     if (filters.showFavoritesOnly) {
-      filtered = filtered.filter(note => note.isFavorite);
+      filtered = filtered.filter((note) => note.isFavorite);
     }
 
     filtered.sort((a, b) => {
       let comparison = 0;
-      
+
       switch (filters.sortBy) {
         case 'title':
           comparison = a.title.localeCompare(b.title);
           break;
         case 'createdAt':
-          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          comparison =
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
           break;
         case 'updatedAt':
         default:
-          comparison = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+          comparison =
+            new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
           break;
       }
 
@@ -141,12 +143,12 @@ export default function NotesScreen() {
               {searchQuery ? 'No notes found' : 'No notes yet'}
             </Text>
             <Text style={styles.emptySubtext}>
-              {searchQuery 
+              {searchQuery
                 ? 'Try a different search term'
                 : 'Create your first note to get started'}
             </Text>
             {!searchQuery && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.createFirstNoteButton}
                 onPress={() => router.push('/(tabs)/create')}
               >

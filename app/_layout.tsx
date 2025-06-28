@@ -37,7 +37,9 @@ export default function RootLayout() {
     checkAuthState();
 
     // Listen for auth state changes
-    const { data: { subscription } } = authService.onAuthStateChange((event, session) => {
+    const {
+      data: { subscription },
+    } = authService.onAuthStateChange((event, session) => {
       setIsAuthenticated(!!session?.user);
     });
 
@@ -48,8 +50,17 @@ export default function RootLayout() {
   if (isAuthenticated === null) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-          <Text style={{ fontSize: 18, color: '#333' }}>Loading SuperNote...</Text>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: '#fff',
+          }}
+        >
+          <Text style={{ fontSize: 18, color: '#333' }}>
+            Loading SuperNote...
+          </Text>
         </View>
       </GestureHandlerRootView>
     );
@@ -59,15 +70,46 @@ export default function RootLayout() {
   if (!isSupabaseConfigured) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', padding: 20 }}>
-          <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#333', marginBottom: 10 }}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: '#fff',
+            padding: 20,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 20,
+              fontWeight: 'bold',
+              color: '#333',
+              marginBottom: 10,
+            }}
+          >
             Supabase Configuration Required
           </Text>
-          <Text style={{ fontSize: 16, color: '#666', textAlign: 'center', lineHeight: 24 }}>
-            Please update your .env file with your Supabase project URL and anonymous key to continue.
+          <Text
+            style={{
+              fontSize: 16,
+              color: '#666',
+              textAlign: 'center',
+              lineHeight: 24,
+            }}
+          >
+            Please update your .env file with your Supabase project URL and
+            anonymous key to continue.
           </Text>
-          <Text style={{ fontSize: 14, color: '#999', textAlign: 'center', marginTop: 10 }}>
-            You can find these values in your Supabase project settings under 'API'.
+          <Text
+            style={{
+              fontSize: 14,
+              color: '#999',
+              textAlign: 'center',
+              marginTop: 10,
+            }}
+          >
+            You can find these values in your Supabase project settings under
+            &apos;API&apos;.
           </Text>
         </View>
       </GestureHandlerRootView>
@@ -81,7 +123,10 @@ export default function RootLayout() {
           {isAuthenticated ? (
             <>
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="payment/success" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="payment/success"
+                options={{ headerShown: false }}
+              />
             </>
           ) : (
             <Stack.Screen name="auth" options={{ headerShown: false }} />

@@ -4,22 +4,28 @@ import {
   TouchableOpacity,
   Text,
   StyleSheet,
-  Alert,
   Dimensions,
   ActivityIndicator,
 } from 'react-native';
-import { Play, Pause, Volume2, VolumeX, Maximize2, X } from 'lucide-react-native';
-import { Video } from 'expo-av';
+import {
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  Maximize2,
+  X,
+} from 'lucide-react-native';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import * as Haptics from 'expo-haptics';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 interface VideoPlayerProps {
-  videoUri: string;
-  style?: any;
-  autoPlay?: boolean;
-  showControls?: boolean;
-  onError?: (error: string) => void;
+  readonly videoUri: string;
+  readonly style?: any;
+  readonly autoPlay?: boolean;
+  readonly showControls?: boolean;
+  readonly onError?: (error: string) => void;
 }
 
 export function VideoPlayer({
@@ -32,24 +38,106 @@ export function VideoPlayer({
   const [isPlaying, setIsPlaying] = useState(autoPlay);
   const [isMuted, setIsMuted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  
+  const player = useVideoPlayer(videoUri, (player) => {
+    // Video is preparing to load
+    if (autoPlay) {
+      player.play();
+    }
+  });
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControlsOverlay, setShowControlsOverlay] = useState(true);
-  
-  const videoRef = useRef<Video>(null);
+
+  const [hasError, setHasError] = useState(false);
+
+  const videoRef = useRef<VideoView>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    // Add a timeout for loading state to prevent infinite loading
+    const loadingTimeout = setTimeout(() => {
+      if (isLoading) {
+        console.log('Video loading timeout - setting isLoading to false');
+        setIsLoading(false);
+      }
+    }, 5000); // 5 second timeout
+
+    const playingSubscription = player.addListener(
+      'playingChange',
+      (payload) => {
+        console.log('Video playing state changed:', payload.isPlaying);
+        setIsPlaying(payload.isPlaying);
+        setIsLoading(false); // Video is ready when playing state changes
+        if (!payload.isPlaying) {
+          setShowControlsOverlay(true);
+        }
+      }
+    );
+
+    const mutedSubscription = player.addListener('mutedChange', (payload) => {
+      setIsMuted(payload.muted);
+    });
+
+    const statusSubscription = player.addListener('statusChange', (payload) => {
+      console.log('Video status changed:', payload.status);
+      if (payload.status === 'loading') {
+        setIsLoading(true);
+      } else if (payload.status === 'idle') {
+        setIsLoading(false);
+        setHasError(false);
+        // Get duration when video is ready
+        if (player.duration) {
+          setDuration(player.duration * 1000); // Convert to milliseconds
+        }
+      } else if (payload.status === 'error') {
+        setIsLoading(false);
+        setHasError(true);
+        onError?.('Không thể tải video');
+      }
+    });
+
+    // Add interval to track current time progress
+    const progressInterval = setInterval(() => {
+      if (player && !isLoading) {
+        // Get current time in milliseconds
+        const currentTime = player.currentTime * 1000;
+        const videoDuration = player.duration * 1000;
+        
+        console.log('Progress update:', { 
+          currentTime: currentTime, 
+          duration: videoDuration,
+          playerDuration: player.duration 
+        });
+        
+        setPosition(currentTime);
+        if (videoDuration && videoDuration !== duration) {
+          setDuration(videoDuration);
+        }
+      }
+    }, 100); // Update every 100ms for smooth progress
+
+    return () => {
+      clearTimeout(loadingTimeout);
+      clearInterval(progressInterval);
+      playingSubscription.remove();
+      mutedSubscription.remove();
+      statusSubscription.remove();
+    };
+  }, [player, onError, isLoading, duration]);
 
   const hideControlsAfterDelay = () => {
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
     }
-    
+
     controlsTimeoutRef.current = setTimeout(() => {
       if (isPlaying) {
         setShowControlsOverlay(false);
       }
-    }, 3000);
+    }, 3000) as any;
   };
 
   const showControlsTemporarily = () => {
@@ -76,14 +164,11 @@ export function VideoPlayer({
 
   const togglePlayPause = async () => {
     try {
-      if (!videoRef.current) return;
-
       if (isPlaying) {
-        await videoRef.current.pauseAsync();
+        player.pause();
       } else {
-        await videoRef.current.playAsync();
+        player.play();
       }
-      
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
       console.error('Error toggling play/pause:', error);
@@ -91,49 +176,35 @@ export function VideoPlayer({
     }
   };
 
-  const toggleMute = async () => {
-    try {
-      if (!videoRef.current) return;
-
-      await videoRef.current.setIsMutedAsync(!isMuted);
-      setIsMuted(!isMuted);
-      
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch (error) {
-      console.error('Error toggling mute:', error);
-    }
-  };
-
-  const seekTo = async (seekPosition: number) => {
-    try {
-      if (!videoRef.current) return;
-      
-      const seekTime = (seekPosition / 100) * duration;
-      await videoRef.current.setPositionAsync(seekTime);
-    } catch (error) {
-      console.error('Error seeking:', error);
-    }
+  const toggleMute = () => {
+    player.muted = !isMuted;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   };
 
   const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (videoRef.current) {
+      if (isFullscreen) {
+        videoRef.current.exitFullscreen?.();
+      } else {
+        videoRef.current.enterFullscreen?.();
+      }
+      setIsFullscreen(!isFullscreen);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    }
   };
 
-  const onPlaybackStatusUpdate = (status: any) => {
-    if (status.isLoaded) {
-      setIsLoading(false);
-      setIsPlaying(status.isPlaying);
-      setDuration(status.durationMillis || 0);
-      setPosition(status.positionMillis || 0);
+  const handleProgressBarPress = (event: any) => {
+    if (duration > 0) {
+      const { locationX } = event.nativeEvent;
+      // Estimate progress bar width (we'll set a fixed width in styles)
+      const progressBarWidth = 200; // This will be overridden by flex: 1
+      const percentage = Math.max(0, Math.min(1, locationX / progressBarWidth));
+      const newTime = (percentage * duration) / 1000; // Convert to seconds
       
-      if (status.didJustFinish) {
-        setIsPlaying(false);
-        setShowControlsOverlay(true);
-      }
-    } else if (status.error) {
-      console.error('Video playback error:', status.error);
-      onError?.('Lỗi phát video: ' + status.error);
+      player.currentTime = newTime;
+      setPosition(newTime * 1000);
+      
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     }
   };
 
@@ -150,9 +221,27 @@ export function VideoPlayer({
     ? styles.fullscreenContainer
     : [styles.videoContainer, style];
 
-  const videoStyle = isFullscreen
-    ? styles.fullscreenVideo
-    : styles.video;
+  // Show error state if there's an error
+  if (hasError) {
+    return (
+      <View style={[videoContainerStyle, styles.errorContainer]}>
+        <View style={styles.errorContent}>
+          <Text style={styles.errorText}>Không thể tải video</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={() => {
+              setHasError(false);
+              setIsLoading(true);
+              // Try to reload the player
+              player.replay();
+            }}
+          >
+            <Text style={styles.retryText}>Thử lại</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={videoContainerStyle}>
@@ -161,15 +250,12 @@ export function VideoPlayer({
         activeOpacity={1}
         onPress={showControlsTemporarily}
       >
-        <Video
+        <VideoView
           ref={videoRef}
-          style={videoStyle}
-          source={{ uri: videoUri }}
-          shouldPlay={isPlaying}
-          isLooping={false}
-          isMuted={isMuted}
-          onPlaybackStatusUpdate={onPlaybackStatusUpdate}
-          resizeMode="contain"
+          style={isFullscreen ? styles.fullscreenVideo : styles.video}
+          player={player}
+          contentFit="contain"
+          nativeControls={false}
         />
 
         {/* Loading Indicator */}
@@ -212,24 +298,24 @@ export function VideoPlayer({
             <View style={styles.bottomControls}>
               {/* Progress Bar */}
               <View style={styles.progressContainer}>
-                <Text style={styles.timeText}>
-                  {formatTime(position)}
-                </Text>
-                
-                <View style={styles.progressBar}>
+                <Text style={styles.timeText}>{formatTime(position)}</Text>
+
+                <TouchableOpacity 
+                  style={styles.progressBar}
+                  onPress={handleProgressBarPress}
+                  activeOpacity={0.8}
+                >
                   <View style={styles.progressTrack}>
                     <View
                       style={[
                         styles.progressFill,
-                        { width: `${progressPercentage}%` }
+                        { width: `${progressPercentage}%` },
                       ]}
                     />
                   </View>
-                </View>
-                
-                <Text style={styles.timeText}>
-                  {formatTime(duration)}
-                </Text>
+                </TouchableOpacity>
+
+                <Text style={styles.timeText}>{formatTime(duration)}</Text>
               </View>
 
               {/* Control Buttons */}
@@ -337,16 +423,17 @@ const styles = StyleSheet.create({
   progressBar: {
     flex: 1,
     marginHorizontal: 12,
+    paddingVertical: 8, // Add padding for easier touch
   },
   progressTrack: {
-    height: 3,
+    height: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 1.5,
+    borderRadius: 2,
   },
   progressFill: {
-    height: 3,
+    height: 4,
     backgroundColor: '#FFFFFF',
-    borderRadius: 1.5,
+    borderRadius: 2,
   },
   timeText: {
     color: '#FFFFFF',
@@ -362,4 +449,30 @@ const styles = StyleSheet.create({
     padding: 8,
     marginLeft: 16,
   },
-}); 
+  errorContainer: {
+    backgroundColor: '#1A1A1A',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContent: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+});

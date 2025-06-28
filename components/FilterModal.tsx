@@ -17,7 +17,12 @@ interface FilterModalProps {
   onClose: () => void;
 }
 
-export function FilterModal({ visible, filters, onApply, onClose }: FilterModalProps) {
+export function FilterModal({
+  visible,
+  filters,
+  onApply,
+  onClose,
+}: FilterModalProps) {
   const [localFilters, setLocalFilters] = React.useState<NoteFilter>(filters);
 
   React.useEffect(() => {
@@ -63,7 +68,7 @@ export function FilterModal({ visible, filters, onApply, onClose }: FilterModalP
                 key={option.key}
                 style={styles.option}
                 onPress={() =>
-                  setLocalFilters(prev => ({ ...prev, sortBy: option.key }))
+                  setLocalFilters((prev) => ({ ...prev, sortBy: option.key }))
                 }
               >
                 <Text style={styles.optionText}>{option.label}</Text>
@@ -81,7 +86,10 @@ export function FilterModal({ visible, filters, onApply, onClose }: FilterModalP
                 key={option.key}
                 style={styles.option}
                 onPress={() =>
-                  setLocalFilters(prev => ({ ...prev, sortOrder: option.key }))
+                  setLocalFilters((prev) => ({
+                    ...prev,
+                    sortOrder: option.key,
+                  }))
                 }
               >
                 <Text style={styles.optionText}>{option.label}</Text>
@@ -98,7 +106,10 @@ export function FilterModal({ visible, filters, onApply, onClose }: FilterModalP
               <Switch
                 value={localFilters.showFavoritesOnly}
                 onValueChange={(value) =>
-                  setLocalFilters(prev => ({ ...prev, showFavoritesOnly: value }))
+                  setLocalFilters((prev) => ({
+                    ...prev,
+                    showFavoritesOnly: value,
+                  }))
                 }
                 trackColor={{ false: '#E5E7EB', true: '#007AFF' }}
                 thumbColor="#FFFFFF"

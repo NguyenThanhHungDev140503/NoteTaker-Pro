@@ -74,25 +74,21 @@ export default function SettingsScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await authService.signOut();
-              // Navigation will be handled by auth state change
-            } catch (error) {
-              Alert.alert('Error', 'Failed to sign out');
-            }
-          },
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await authService.signOut();
+            // Navigation will be handled by auth state change
+          } catch (error) {
+            Alert.alert('Error', 'Failed to sign out');
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleExportData = async () => {
@@ -135,13 +131,19 @@ export default function SettingsScreen() {
             }
           },
         },
-      ]
+      ],
     );
   };
 
   const isSubscribed = userSubscription?.subscription_status === 'active';
 
-  const SettingsSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  const SettingsSection = ({
+    title,
+    children,
+  }: {
+    title: string;
+    children: React.ReactNode;
+  }) => (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
       {children}
@@ -173,7 +175,13 @@ export default function SettingsScreen() {
       <View style={styles.rowLeft}>
         <Icon size={20} color={destructive ? '#FF3B30' : '#007AFF'} />
         <View style={styles.rowText}>
-          <Text style={[styles.rowTitle, destructive && styles.destructiveText, disabled && styles.disabledText]}>
+          <Text
+            style={[
+              styles.rowTitle,
+              destructive && styles.destructiveText,
+              disabled && styles.disabledText,
+            ]}
+          >
             {title}
           </Text>
           {subtitle && <Text style={styles.rowSubtitle}>{subtitle}</Text>}
@@ -204,7 +212,7 @@ export default function SettingsScreen() {
         </SettingsSection>
 
         {!isLoadingSubscription && (
-          <SubscriptionCard 
+          <SubscriptionCard
             userSubscription={userSubscription}
             onPurchaseComplete={loadSubscriptionData}
           />
@@ -295,11 +303,7 @@ export default function SettingsScreen() {
         </SettingsSection>
 
         <SettingsSection title="Support">
-          <SettingsRow
-            icon={Info}
-            title="About"
-            subtitle="Version 1.0.0"
-          />
+          <SettingsRow icon={Info} title="About" subtitle="Version 1.0.0" />
 
           <SettingsRow
             icon={Shield}

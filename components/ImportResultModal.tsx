@@ -7,7 +7,11 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
-import { CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, X } from 'lucide-react-native';
+import {
+  CircleCheck as CheckCircle,
+  TriangleAlert as AlertTriangle,
+  X,
+} from 'lucide-react-native';
 
 interface ImportResultModalProps {
   visible: boolean;
@@ -19,7 +23,11 @@ interface ImportResultModalProps {
   onClose: () => void;
 }
 
-export function ImportResultModal({ visible, result, onClose }: ImportResultModalProps) {
+export function ImportResultModal({
+  visible,
+  result,
+  onClose,
+}: ImportResultModalProps) {
   if (!result) return null;
 
   return (
@@ -39,21 +47,30 @@ export function ImportResultModal({ visible, result, onClose }: ImportResultModa
 
         <View style={styles.content}>
           {/* Success Summary */}
-          <View style={[styles.resultCard, result.success ? styles.successCard : styles.errorCard]}>
+          <View
+            style={[
+              styles.resultCard,
+              result.success ? styles.successCard : styles.errorCard,
+            ]}
+          >
             {result.success ? (
               <CheckCircle size={24} color="#34C759" />
             ) : (
               <AlertTriangle size={24} color="#FF3B30" />
             )}
             <View style={styles.resultText}>
-              <Text style={[styles.resultTitle, result.success ? styles.successText : styles.errorText]}>
+              <Text
+                style={[
+                  styles.resultTitle,
+                  result.success ? styles.successText : styles.errorResultTitle,
+                ]}
+              >
                 {result.success ? 'Import Successful' : 'Import Failed'}
               </Text>
               <Text style={styles.resultSubtitle}>
-                {result.imported > 0 
+                {result.imported > 0
                   ? `${result.imported} note${result.imported !== 1 ? 's' : ''} imported successfully`
-                  : 'No notes were imported'
-                }
+                  : 'No notes were imported'}
               </Text>
             </View>
           </View>
@@ -64,11 +81,14 @@ export function ImportResultModal({ visible, result, onClose }: ImportResultModa
               <Text style={styles.errorsTitle}>
                 Issues ({result.errors.length})
               </Text>
-              <ScrollView style={styles.errorsList} showsVerticalScrollIndicator={false}>
+              <ScrollView
+                style={styles.errorsList}
+                showsVerticalScrollIndicator={false}
+              >
                 {result.errors.map((error, index) => (
                   <View key={index} style={styles.errorItem}>
                     <AlertTriangle size={16} color="#FF9500" />
-                    <Text style={styles.errorText}>{error}</Text>
+                    <Text style={styles.errorItemText}>{error}</Text>
                   </View>
                 ))}
               </ScrollView>
@@ -78,9 +98,16 @@ export function ImportResultModal({ visible, result, onClose }: ImportResultModa
           {/* Tips Section */}
           <View style={styles.tipsSection}>
             <Text style={styles.tipsTitle}>Import Tips</Text>
-            <Text style={styles.tipText}>• Only JSON files exported from this app are supported</Text>
-            <Text style={styles.tipText}>• Duplicate notes will be imported with "(Imported)" suffix</Text>
-            <Text style={styles.tipText}>• Invalid notes are skipped to protect data integrity</Text>
+            <Text style={styles.tipText}>
+              • Only JSON files exported from this app are supported
+            </Text>
+            <Text style={styles.tipText}>
+              • Duplicate notes will be imported with &quot;(Imported)&quot;
+              suffix
+            </Text>
+            <Text style={styles.tipText}>
+              • Invalid notes are skipped to protect data integrity
+            </Text>
           </View>
         </View>
 
@@ -149,7 +176,7 @@ const styles = StyleSheet.create({
   successText: {
     color: '#15803D',
   },
-  errorText: {
+  errorResultTitle: {
     color: '#DC2626',
   },
   resultSubtitle: {
@@ -176,7 +203,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 8,
   },
-  errorText: {
+  errorItemText: {
     fontSize: 14,
     color: '#6B7280',
     marginLeft: 8,

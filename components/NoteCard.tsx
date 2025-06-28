@@ -9,7 +9,14 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { Star, Calendar, Camera, Mic, MoveVertical as MoreVertical, Trash2 } from 'lucide-react-native';
+import {
+  Star,
+  Calendar,
+  Camera,
+  Mic,
+  MoveVertical as MoreVertical,
+  Trash2,
+} from 'lucide-react-native';
 import { Note } from '@/types/note';
 import { useNote } from '@/contexts/NotesContext';
 import { router } from 'expo-router';
@@ -20,7 +27,9 @@ interface NoteCardProps {
 }
 
 export function NoteCard({ note, compact = false }: NoteCardProps) {
-  const { deleteNote, toggleFavorite, isFavoriteLoading, isDeleting } = useNote(note.id);
+  const { deleteNote, toggleFavorite, isFavoriteLoading, isDeleting } = useNote(
+    note.id,
+  );
 
   const handleToggleFavorite = async () => {
     try {
@@ -31,30 +40,26 @@ export function NoteCard({ note, compact = false }: NoteCardProps) {
   };
 
   const handleDelete = () => {
-    Alert.alert(
-      'Delete Note',
-      'Are you sure you want to delete this note?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteNote();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete note');
-            }
-          },
+    Alert.alert('Delete Note', 'Are you sure you want to delete this note?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteNote();
+          } catch (error) {
+            Alert.alert('Error', 'Failed to delete note');
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleViewNote = () => {
     router.push({
       pathname: '/note-detail',
-      params: { noteId: note.id }
+      params: { noteId: note.id },
     });
   };
 
@@ -64,8 +69,12 @@ export function NoteCard({ note, compact = false }: NoteCardProps) {
     const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
 
     if (diffInHours < 24) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diffInHours < 168) { // 7 days
+      return date.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } else if (diffInHours < 168) {
+      // 7 days
       return date.toLocaleDateString([], { weekday: 'short' });
     } else {
       return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
@@ -79,7 +88,13 @@ export function NoteCard({ note, compact = false }: NoteCardProps) {
 
   if (isDeleting) {
     return (
-      <View style={[styles.container, compact && styles.compactContainer, styles.deletingContainer]}>
+      <View
+        style={[
+          styles.container,
+          compact && styles.compactContainer,
+          styles.deletingContainer,
+        ]}
+      >
         <ActivityIndicator size="small" color="#007AFF" />
         <Text style={styles.deletingText}>Deleting...</Text>
       </View>
@@ -93,7 +108,7 @@ export function NoteCard({ note, compact = false }: NoteCardProps) {
       onPress={handleViewNote}
     >
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={handleToggleFavorite}
           disabled={isFavoriteLoading}
           style={styles.favoriteButton}
@@ -124,21 +139,19 @@ export function NoteCard({ note, compact = false }: NoteCardProps) {
       {/* Image preview */}
       {note.images.length > 0 && (
         <View style={styles.imagePreviewContainer}>
-          <ScrollView 
-            horizontal 
+          <ScrollView
+            horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.imagePreviewScroll}
           >
             {note.images.slice(0, 3).map((uri, index) => (
-              <Image 
-                key={index} 
-                source={{ uri }} 
-                style={styles.imagePreview}
-              />
+              <Image key={index} source={{ uri }} style={styles.imagePreview} />
             ))}
             {note.images.length > 3 && (
               <View style={styles.moreImagesIndicator}>
-                <Text style={styles.moreImagesText}>+{note.images.length - 3}</Text>
+                <Text style={styles.moreImagesText}>
+                  +{note.images.length - 3}
+                </Text>
               </View>
             )}
           </ScrollView>
@@ -156,7 +169,9 @@ export function NoteCard({ note, compact = false }: NoteCardProps) {
           {note.audioRecordings.length > 0 && (
             <View style={styles.mediaIndicator}>
               <Mic size={12} color="#6B7280" />
-              <Text style={styles.mediaCount}>{note.audioRecordings.length}</Text>
+              <Text style={styles.mediaCount}>
+                {note.audioRecordings.length}
+              </Text>
             </View>
           )}
         </View>

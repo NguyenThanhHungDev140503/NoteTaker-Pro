@@ -8,29 +8,32 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { 
-  FolderOpen, 
-  FileText, 
-  TriangleAlert as AlertTriangle, 
+import {
+  FolderOpen,
+  FileText,
+  TriangleAlert as AlertTriangle,
   MapPin,
   Info,
-  FolderTree
+  FolderTree,
 } from 'lucide-react-native';
 import { iosFileBrowserService } from '@/services/iOSFileBrowserService';
 
 interface IOSFileBrowserButtonProps {
-  onFilesSelected?: (files: Array<{ uri: string; name: string }>) => void;
+  onFilesSelected?: (files: { uri: string; name: string }[]) => void;
   onImportComplete?: (result: { imported: number; errors: string[] }) => void;
   style?: any;
 }
 
-export function IOSFileBrowserButton({ 
-  onFilesSelected, 
+export function IOSFileBrowserButton({
+  onFilesSelected,
   onImportComplete,
-  style 
+  style,
 }: IOSFileBrowserButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [lastResult, setLastResult] = useState<{ imported: number; errors: string[] } | null>(null);
+  const [lastResult, setLastResult] = useState<{
+    imported: number;
+    errors: string[];
+  } | null>(null);
 
   const isIOS = Platform.OS === 'ios';
   const isIOS16Plus = isIOS && parseInt(Platform.Version as string, 10) >= 16;
@@ -40,7 +43,7 @@ export function IOSFileBrowserButton({
       Alert.alert(
         'iOS Required',
         'This feature is specifically designed for iOS devices.',
-        [{ text: 'OK' }]
+        [{ text: 'OK' }],
       );
       return;
     }
@@ -61,19 +64,16 @@ export function IOSFileBrowserButton({
 
     try {
       setIsLoading(true);
-      const listing = await iosFileBrowserService.createCurrentDirectoryListing();
-      
-      Alert.alert(
-        'Current Notes Directory',
-        listing,
-        [
-          { text: 'Close' },
-          { 
-            text: 'Browse Files', 
-            onPress: () => handleBrowseFiles()
-          }
-        ]
-      );
+      const listing =
+        await iosFileBrowserService.createCurrentDirectoryListing();
+
+      Alert.alert('Current Notes Directory', listing, [
+        { text: 'Close' },
+        {
+          text: 'Browse Files',
+          onPress: () => handleBrowseFiles(),
+        },
+      ]);
     } catch (error) {
       console.error('Error creating directory listing:', error);
       Alert.alert('Error', 'Failed to create directory listing.');
@@ -87,7 +87,7 @@ export function IOSFileBrowserButton({
       Alert.alert(
         'iOS Required',
         'This file browser feature is specifically designed for iOS devices.',
-        [{ text: 'OK' }]
+        [{ text: 'OK' }],
       );
       return;
     }
@@ -111,8 +111,11 @@ export function IOSFileBrowserButton({
           'No supported note files were selected. Please select .json, .txt, or .md files.',
           [
             { text: 'OK' },
-            { text: 'Show Location Info', onPress: () => handleShowCurrentLocation() }
-          ]
+            {
+              text: 'Show Location Info',
+              onPress: () => handleShowCurrentLocation(),
+            },
+          ],
         );
         return;
       }
@@ -128,11 +131,10 @@ export function IOSFileBrowserButton({
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Import',
-            onPress: () => handleImportFiles(result.files)
-          }
-        ]
+            onPress: () => handleImportFiles(result.files),
+          },
+        ],
       );
-
     } catch (error) {
       console.error('File browser error:', error);
       Alert.alert('Error', 'Failed to open file browser. Please try again.');
@@ -141,31 +143,32 @@ export function IOSFileBrowserButton({
     }
   };
 
-  const handleImportFiles = async (files: Array<{ uri: string; name: string }>) => {
+  const handleImportFiles = async (files: { uri: string; name: string }[]) => {
     try {
       setIsLoading(true);
 
-      const importResult = await iosFileBrowserService.importNotesFromFiles(files);
+      const importResult =
+        await iosFileBrowserService.importNotesFromFiles(files);
       setLastResult(importResult);
 
       // Show detailed import results
-      const message = importResult.imported > 0
-        ? `Successfully imported ${importResult.imported} note(s)!${
-            importResult.errors.length > 0 
-              ? `\n\n⚠️ ${importResult.errors.length} error(s) occurred:\n${importResult.errors.slice(0, 3).join('\n')}${
-                  importResult.errors.length > 3 ? '\n...' : ''
-                }` 
-              : ''
-          }`
-        : importResult.errors.length > 0
-        ? `No notes were imported due to errors:\n${importResult.errors.slice(0, 5).join('\n')}`
-        : 'No notes were imported.';
+      const message =
+        importResult.imported > 0
+          ? `Successfully imported ${importResult.imported} note(s)!${
+              importResult.errors.length > 0
+                ? `\n\n⚠️ ${importResult.errors.length} error(s) occurred:\n${importResult.errors.slice(0, 3).join('\n')}${
+                    importResult.errors.length > 3 ? '\n...' : ''
+                  }`
+                : ''
+            }`
+          : importResult.errors.length > 0
+            ? `No notes were imported due to errors:\n${importResult.errors.slice(0, 5).join('\n')}`
+            : 'No notes were imported.';
 
       Alert.alert('Import Complete', message);
 
       // Notify parent component
       onImportComplete?.(importResult);
-
     } catch (error) {
       console.error('Import error:', error);
       Alert.alert('Import Error', 'Failed to import notes. Please try again.');
@@ -235,7 +238,8 @@ export function IOSFileBrowserButton({
                 <FileText size={14} color="#34C759" />
                 <Text style={styles.resultText}>
                   Last import: {lastResult.imported} notes
-                  {lastResult.errors.length > 0 && ` (${lastResult.errors.length} errors)`}
+                  {lastResult.errors.length > 0 &&
+                    ` (${lastResult.errors.length} errors)`}
                 </Text>
               </View>
             )}
@@ -253,7 +257,9 @@ export function IOSFileBrowserButton({
             activeOpacity={0.7}
           >
             <MapPin size={16} color="#007AFF" />
-            <Text style={styles.secondaryButtonText}>Show Current Location</Text>
+            <Text style={styles.secondaryButtonText}>
+              Show Current Location
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -272,10 +278,9 @@ export function IOSFileBrowserButton({
       <View style={styles.infoPanel}>
         <Info size={16} color="#6B7280" />
         <Text style={styles.infoText}>
-          {isIOS 
+          {isIOS
             ? 'This will guide you to your current notes storage location and help you select files to import.'
-            : 'This feature requires an iOS device to access the Files app.'
-          }
+            : 'This feature requires an iOS device to access the Files app.'}
         </Text>
       </View>
 
