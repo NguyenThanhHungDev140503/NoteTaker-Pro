@@ -22,6 +22,8 @@ import * as Haptics from 'expo-haptics';
 import { MediaPicker } from '@/components/MediaPicker';
 import { AudioRecorder } from '@/components/AudioRecorder';
 import { AudioPlayer } from '@/components/AudioPlayer';
+import { VideoRecorder } from '@/components/VideoRecorder';
+import { VideoPlayer } from '@/components/VideoPlayer';
 import { useNotes } from '@/contexts/NotesContext';
 import { Note } from '@/types/note';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
@@ -44,7 +46,9 @@ export default function CreateScreen() {
   const [content, setContent] = useState('');
   const [images, setImages] = useState<string[]>([]);
   const [audioRecordings, setAudioRecordings] = useState<string[]>([]);
+  const [videos, setVideos] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [isVideoRecording, setIsVideoRecording] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   
   // Image viewer states
@@ -98,6 +102,7 @@ export default function CreateScreen() {
     setContent('');
     setImages([]);
     setAudioRecordings([]);
+    setVideos([]);
     setImageLoadingStates({});
     setSelectedImageIndex(0);
     setIsGestureActive(false);
@@ -317,6 +322,7 @@ export default function CreateScreen() {
         content: content.trim(),
         images,
         audioRecordings,
+        videos,
         isFavorite: false,
         tags: [],
       };
@@ -340,6 +346,10 @@ export default function CreateScreen() {
 
   const handleAudioRecorded = (audioUri: string) => {
     setAudioRecordings(prev => [...prev, audioUri]);
+  };
+
+  const handleVideoPicked = (videoUri: string) => {
+    setVideos(prev => [...prev, videoUri]);
   };
 
   const removeImage = (index: number) => {
@@ -366,6 +376,10 @@ export default function CreateScreen() {
 
   const removeAudio = (index: number) => {
     setAudioRecordings(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeVideo = (index: number) => {
+    setVideos(prev => prev.filter((_, i) => i !== index));
   };
 
   // Navigation functions
@@ -547,7 +561,11 @@ export default function CreateScreen() {
         <View style={styles.mediaSection}>
           <Text style={styles.sectionTitle}>Media</Text>
           
-          <MediaPicker onImagePicked={handleImagePicked} />
+          <MediaPicker 
+            onImagePicked={handleImagePicked} 
+            onVideoPicked={handleVideoPicked}
+            showVideoOptions={true}
+          />
           
           {images.length > 0 && (
             <View style={styles.imageContainer}>
@@ -616,6 +634,33 @@ export default function CreateScreen() {
                   index={index}
                   onDelete={removeAudio}
                 />
+              ))}
+            </View>
+          )}
+
+          {videos.length > 0 && (
+            <View style={styles.videoContainer}>
+              <Text style={styles.mediaLabel}>Videos ({videos.length})</Text>
+              {videos.map((uri, index) => (
+                <View key={`${uri}-${index}`} style={styles.videoItem}>
+                  <VideoPlayer
+                    videoUri={uri}
+                    style={styles.videoPreview}
+                    autoPlay={false}
+                    showControls={true}
+                    onError={(error) => {
+                      console.error('Video playback error:', error);
+                      Alert.alert('Error', 'Failed to play video');
+                    }}
+                  />
+                  <TouchableOpacity
+                    style={styles.removeVideoButton}
+                    onPress={() => removeVideo(index)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <X size={16} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
               ))}
             </View>
           )}
@@ -913,6 +958,40 @@ const styles = StyleSheet.create({
   },
   audioContainer: {
     marginTop: 16,
+  },
+  videoContainer: {
+    marginTop: 16,
+  },
+  videoItem: {
+    position: 'relative',
+    marginBottom: 12,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  videoPreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    backgroundColor: '#000000',
+  },
+  removeVideoButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#FF3B30',
+    borderRadius: 14,
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   // Enhanced Image Viewer Styles
   imageViewer: {

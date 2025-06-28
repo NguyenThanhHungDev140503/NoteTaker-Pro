@@ -16,13 +16,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Star, Share, Pencil, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight, Save, Circle as XCircle } from 'lucide-react-native';
+import { ArrowLeft, Star, Share, Pencil, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight, Save, Circle as XCircle, Video } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Note } from '@/types/note';
 import { useNote } from '@/contexts/NotesContext';
 import { AudioPlayer } from '@/components/AudioPlayer';
 import { MediaPicker } from '@/components/MediaPicker';
 import { AudioRecorder } from '@/components/AudioRecorder';
+import { VideoPlayer } from '@/components/VideoPlayer';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { 
   useSharedValue, 
@@ -52,6 +53,7 @@ export default function NoteDetailScreen() {
   const [editedContent, setEditedContent] = useState('');
   const [editedImages, setEditedImages] = useState<string[]>([]);
   const [editedAudioRecordings, setEditedAudioRecordings] = useState<string[]>([]);
+  const [editedVideos, setEditedVideos] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   
@@ -96,6 +98,7 @@ export default function NoteDetailScreen() {
       setEditedContent(note.content || '');
       setEditedImages([...note.images]);
       setEditedAudioRecordings([...note.audioRecordings]);
+      setEditedVideos([...note.videos]);
       
       // CRITICAL FIX: Ensure edit mode is always reset when note loads
       if (isEditing) {
@@ -341,7 +344,8 @@ export default function NoteDetailScreen() {
         editedTitle !== (note?.title || '') ||
         editedContent !== (note?.content || '') ||
         JSON.stringify(editedImages) !== JSON.stringify(note?.images || []) ||
-        JSON.stringify(editedAudioRecordings) !== JSON.stringify(note?.audioRecordings || []);
+        JSON.stringify(editedAudioRecordings) !== JSON.stringify(note?.audioRecordings || []) ||
+        JSON.stringify(editedVideos) !== JSON.stringify(note?.videos || []);
 
       console.log('Has unsaved changes:', hasChanges);
 
@@ -362,6 +366,7 @@ export default function NoteDetailScreen() {
                   setEditedContent(note.content || '');
                   setEditedImages([...note.images]);
                   setEditedAudioRecordings([...note.audioRecordings]);
+                  setEditedVideos([...note.videos]);
                 }
                 setIsEditing(false);
               }
@@ -400,6 +405,7 @@ export default function NoteDetailScreen() {
         content: editedContent.trim(),
         images: editedImages,
         audioRecordings: editedAudioRecordings,
+        videos: editedVideos,
       };
 
       console.log('Saving updates:', updates);
@@ -476,12 +482,20 @@ export default function NoteDetailScreen() {
     setEditedAudioRecordings(prev => [...prev, audioUri]);
   };
 
+  const handleVideoPicked = (videoUri: string) => {
+    setEditedVideos(prev => [...prev, videoUri]);
+  };
+
   const removeEditedImage = (index: number) => {
     setEditedImages(prev => prev.filter((_, i) => i !== index));
   };
 
   const removeEditedAudio = (index: number) => {
     setEditedAudioRecordings(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeEditedVideo = (index: number) => {
+    setEditedVideos(prev => prev.filter((_, i) => i !== index));
   };
 
   // Audio delete handler based on mode
@@ -738,6 +752,53 @@ export default function NoteDetailScreen() {
               onAudioRecorded={handleAudioRecorded}
               isRecording={isRecording}
               onRecordingStateChange={setIsRecording}
+            />
+          </View>
+        )}
+
+        {/* Video Recordings */}
+        {(isEditing ? editedVideos : note.videos).length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Video size={20} color="#8B5CF6" />
+              <Text style={styles.sectionTitle}>
+                Videos ({(isEditing ? editedVideos : note.videos).length})
+              </Text>
+            </View>
+            
+            {(isEditing ? editedVideos : note.videos).map((uri, index) => (
+              <View key={`${uri}-${index}`} style={styles.videoItem}>
+                <VideoPlayer
+                  videoUri={uri}
+                  style={styles.videoPreview}
+                  autoPlay={false}
+                  showControls={true}
+                  onError={(error) => {
+                    console.error('Video playback error:', error);
+                    Alert.alert('Error', 'Failed to play video');
+                  }}
+                />
+                {isEditing && (
+                  <TouchableOpacity
+                    style={styles.removeVideoButton}
+                    onPress={() => removeEditedVideo(index)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <X size={16} color="#FFFFFF" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Add Video in Edit Mode */}
+        {isEditing && (
+          <View style={styles.section}>
+            <MediaPicker 
+              onImagePicked={handleImagePicked} 
+              onVideoPicked={handleVideoPicked}
+              showVideoOptions={true}
             />
           </View>
         )}
@@ -1181,5 +1242,36 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
+  },
+  videoItem: {
+    position: 'relative',
+    marginBottom: 12,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  videoPreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    backgroundColor: '#000000',
+  },
+  removeVideoButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#FF3B30',
+    borderRadius: 14,
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
 });
