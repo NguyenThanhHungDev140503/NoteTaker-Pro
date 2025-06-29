@@ -13,7 +13,8 @@
     "build:web": "expo export --platform web",
     "lint": "expo lint",
     "clean": "expo start --clear",
-    "reset": "rm -rf node_modules && npm install && npm run clean"
+    "reset": "rm -rf node_modules && npm install && npm run clean",
+    "test": "jest"
   },
   "dependencies": {
     "@babel/helper-module-imports": "^7.27.1",
@@ -69,13 +70,19 @@
     "@babel/plugin-syntax-flow": "^7.24.1",
     "@babel/plugin-transform-react-jsx": "^7.24.1",
     "@babel/plugin-transform-runtime": "7.27.4",
+    "@testing-library/jest-native": "^5.4.3",
+    "@testing-library/react-native": "^13.2.0",
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.0.10",
     "babel-plugin-module-resolver": "^5.0.2",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~9.2.0",
     "eslint-config-prettier": "^10.1.5",
     "eslint-plugin-prettier": "^5.5.1",
+    "jest": "^30.0.3",
+    "jest-environment-jsdom": "^30.0.2",
     "prettier": "^3.6.2",
+    "react-test-renderer": "^19.0.0",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "~5.8.3"

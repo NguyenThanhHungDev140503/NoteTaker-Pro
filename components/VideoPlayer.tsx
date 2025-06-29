@@ -99,18 +99,59 @@ export function VideoPlayer({
       }
     });
 
+    // Listen for fullscreen changes initiated outside of our custom controls
+    // Some versions of expo-video may not type "fullscreenChange" event officially,
+    // so we cast player to any to avoid TypeScript error.
+    let fsSubscription: { remove: () => void } | undefined;
+    try {
+      // @ts-ignore - dynamic event name
+      fsSubscription = (player as any).addListener(
+        'fullscreenChange',
+        (payload: any) => {
+          // Some platforms emit { fullscreen: boolean } or { isFullscreen: boolean }
+          const fullscreen =
+            payload?.fullscreen ?? payload?.isFullscreen ?? false;
+          console.log(
+            `[VideoPlayer] fullscreenChange event:`,
+            { fullscreen, prevIsFullscreen: isFullscreen, prevShowControlsOverlay: showControlsOverlay }
+          );
+          setIsFullscreen(fullscreen);
+
+          // Log sau khi set state (do setState bất đồng bộ, log giá trị cũ và mới)
+          if (!fullscreen) {
+            setShowControlsOverlay(true);
+            console.log(
+              `[VideoPlayer] Exited fullscreen, showControlsOverlay set to true`,
+              { isFullscreen: fullscreen, showControlsOverlay: true }
+            );
+          } else {
+            console.log(
+              `[VideoPlayer] Entered fullscreen`,
+              { isFullscreen: fullscreen, showControlsOverlay }
+            );
+          }
+        },
+      );
+    } catch (e) {
+      // Event may not be supported; ignore gracefully
+    }
+
     // Add interval to track current time progress
     const progressInterval = setInterval(() => {
       if (player && !isLoading) {
+        // Đồng bộ trạng thái fullscreen trong trường hợp người dùng thoát bằng native gesture
+        if (typeof (player as any).fullscreen === 'boolean' && (player as any).fullscreen !== isFullscreen) {
+          const currentFs = (player as any).fullscreen as boolean;
+          setIsFullscreen(currentFs);
+          console.log('[VideoPlayer] Detected fullscreen change via polling', currentFs);
+          if (!currentFs) {
+            setShowControlsOverlay(true);
+          }
+        }
+
         // Get current time in milliseconds
         const currentTime = player.currentTime * 1000;
         const videoDuration = player.duration * 1000;
-        
-        console.log('Progress update:', { 
-          currentTime: currentTime, 
-          duration: videoDuration,
-          playerDuration: player.duration 
-        });
         
         setPosition(currentTime);
         if (videoDuration && videoDuration !== duration) {
@@ -125,6 +166,9 @@ export function VideoPlayer({
       playingSubscription.remove();
       mutedSubscription.remove();
       statusSubscription.remove();
+      if (fsSubscription) {
+        fsSubscription.remove();
+      }
     };
   }, [player, onError, isLoading, duration]);
 
@@ -182,15 +226,22 @@ export function VideoPlayer({
   };
 
   const toggleFullscreen = () => {
-    if (videoRef.current) {
-      if (isFullscreen) {
-        videoRef.current.exitFullscreen?.();
-      } else {
-        videoRef.current.enterFullscreen?.();
-      }
-      setIsFullscreen(!isFullscreen);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    if (!videoRef.current) return;
+
+    const nextState = !isFullscreen;
+
+    if (isFullscreen) {
+      videoRef.current.exitFullscreen?.();
+      console.log('[VideoPlayer] exitFullscreen() called');
+    } else {
+      videoRef.current.enterFullscreen?.();
+      console.log('[VideoPlayer] enterFullscreen() called');
     }
+
+    console.log('[VideoPlayer] isFullscreen state will be set to', nextState);
+    setIsFullscreen(nextState);
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
   };
 
   const handleProgressBarPress = (event: any) => {
@@ -243,6 +294,14 @@ export function VideoPlayer({
     );
   }
 
+  // Log bất cứ khi nào state isFullscreen hoặc showControlsOverlay thay đổi
+  useEffect(() => {
+    console.log('[VideoPlayer] State change', {
+      isFullscreen,
+      showControlsOverlay,
+    });
+  }, [isFullscreen, showControlsOverlay]);
+
   return (
     <View style={videoContainerStyle}>
       <TouchableOpacity
@@ -255,7 +314,7 @@ export function VideoPlayer({
           style={isFullscreen ? styles.fullscreenVideo : styles.video}
           player={player}
           contentFit="contain"
-          nativeControls={false}
+          nativeControls={isFullscreen}
         />
 
         {/* Loading Indicator */}

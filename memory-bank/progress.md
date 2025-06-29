@@ -13,7 +13,7 @@
 - ✅ **Audio**: Recording, playback controls, audio management
 - ✅ **Videos**: Recording, playback, library selection, video management
   - **VideoRecorder**: Camera controls, quality settings, duration limits
-  - **VideoPlayer**: Full controls, fullscreen, seeking, volume
+  - **VideoPlayer**: Full controls, fullscreen (sử dụng tính năng native của expo-video), seeking, volume
   - **Integration**: Seamless creation/editing workflows
 
 ### Storage & Sync
@@ -50,7 +50,7 @@
 - **VideoPlayer Component**: Full-featured playback
   - Play/pause controls với seek functionality
   - Volume controls với mute toggle
-  - Fullscreen mode với gesture support
+  - Fullscreen mode (sử dụng tính năng native của expo-video) với gesture support
   - Progress bar với time display
   - Auto-hide controls với smooth animations
   - Loading indicators và error handling

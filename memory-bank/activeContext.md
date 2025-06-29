@@ -41,6 +41,11 @@
   4. **Stage 4**: Comprehensive user guidance
 
 ### Recent Changes
+- ✅ **Video Fullscreen Implementation Clarification**:
+  - **Observation**: VideoPlayer.tsx sử dụng các phương thức enterFullscreen() và exitFullscreen() của expo-video.
+  - **Conclusion**: Đây là việc tận dụng tính năng fullscreen native của thư viện expo-video, không phải một triển khai fullscreen tùy chỉnh hoàn toàn.
+  - **Note**: Thông tin trong bộ nhớ về "custom fullscreen không dùng native system fullscreen" có thể là một yêu cầu ban đầu hoặc ý định thiết kế đã thay đổi.
+
 - ✅ **iOS File Browser Refactor**: Complete rewrite với clean architecture
 - ✅ **Helper Functions**: Tách logic thành `tryiOSURLSchemes()` và `createAndShareMarkerFile()`
 - ✅ **Better Error Handling**: Comprehensive fallback strategies
