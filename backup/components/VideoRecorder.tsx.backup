@@ -4,6 +4,7 @@ import {
   TouchableOpacity,
   Text,
   StyleSheet,
+  Alert,
   Dimensions,
   ActivityIndicator,
   StatusBar,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import * as Haptics from 'expo-haptics';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -93,17 +95,6 @@ function VideoPlayerComponent({
     };
   }, [player, onError]);
 
-  // StatusBar management for fullscreen
-  useEffect(() => {
-    if (isFullscreen) {
-      StatusBar.setHidden(true, 'fade');
-      console.log('[VideoRecorder] StatusBar hidden for fullscreen');
-    } else {
-      StatusBar.setHidden(false, 'fade');
-      console.log('[VideoRecorder] StatusBar shown for normal view');
-    }
-  }, [isFullscreen]);
-
   const hideControlsAfterDelay = () => {
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
@@ -170,31 +161,24 @@ function VideoPlayerComponent({
     }
   };
 
-  const toggleFullscreen = () => {
-    if (!videoRef.current) {
-      console.warn('[VideoRecorder] toggleFullscreen: videoRef.current is null');
-      return;
-    }
-
-    const nextState = !isFullscreen;
-
+  const toggleFullscreen = async () => {
     try {
       if (isFullscreen) {
-        videoRef.current.exitFullscreen?.();
-        console.log('[VideoRecorder] exitFullscreen() called');
+        await ScreenOrientation.lockAsync(
+          ScreenOrientation.OrientationLock.PORTRAIT_UP,
+        );
+        StatusBar.setHidden(false);
       } else {
-        videoRef.current.enterFullscreen?.();
-        console.log('[VideoRecorder] enterFullscreen() called');
+        await ScreenOrientation.lockAsync(
+          ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT,
+        );
+        StatusBar.setHidden(true);
       }
-
-      console.log('[VideoRecorder] isFullscreen state will be set to', nextState);
-      setIsFullscreen(nextState);
-
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      setIsFullscreen(!isFullscreen);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch (error) {
-      console.error('[VideoRecorder] toggleFullscreen error:', error);
-      // Fallback: just update state
-      setIsFullscreen(nextState);
+      console.error('Error toggling fullscreen:', error);
+      Alert.alert('Lỗi', 'Không thể thay đổi chế độ toàn màn hình.');
     }
   };
 
@@ -225,19 +209,6 @@ function VideoPlayerComponent({
           contentFit="contain"
           isLooping={false}
           isMuted={isMuted}
-          onFullscreenExit={() => {
-            try {
-              console.log('[VideoRecorder] onFullscreenExit event triggered');
-              setIsFullscreen(false);
-              setShowControlsOverlay(true);
-              console.log('[VideoRecorder] Successfully handled fullscreen exit');
-            } catch (error) {
-              console.error('[VideoRecorder] Error in onFullscreenExit handler:', error);
-              // Fallback: ensure state is consistent
-              setIsFullscreen(false);
-              setShowControlsOverlay(true);
-            }
-          }}
         />
 
         {/* Loading Indicator */}

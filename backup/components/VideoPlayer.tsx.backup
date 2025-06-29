@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Dimensions,
   ActivityIndicator,
-  StatusBar,
 } from 'react-native';
 import {
   Play,
@@ -137,14 +136,23 @@ export function VideoPlayer({
       // Event may not be supported; ignore gracefully
     }
 
-    // Add interval to track current time progress only
-    // ✅ Removed fullscreen polling - now using onFullscreenExit event
+    // Add interval to track current time progress
     const progressInterval = setInterval(() => {
       if (player && !isLoading) {
+        // Đồng bộ trạng thái fullscreen trong trường hợp người dùng thoát bằng native gesture
+        if (typeof (player as any).fullscreen === 'boolean' && (player as any).fullscreen !== isFullscreen) {
+          const currentFs = (player as any).fullscreen as boolean;
+          setIsFullscreen(currentFs);
+          console.log('[VideoPlayer] Detected fullscreen change via polling', currentFs);
+          if (!currentFs) {
+            setShowControlsOverlay(true);
+          }
+        }
+
         // Get current time in milliseconds
         const currentTime = player.currentTime * 1000;
         const videoDuration = player.duration * 1000;
-
+        
         setPosition(currentTime);
         if (videoDuration && videoDuration !== duration) {
           setDuration(videoDuration);
@@ -198,25 +206,6 @@ export function VideoPlayer({
     };
   }, [isPlaying, showControls]);
 
-  // StatusBar management for fullscreen
-  useEffect(() => {
-    if (isFullscreen) {
-      StatusBar.setHidden(true, 'fade');
-      console.log('[VideoPlayer] StatusBar hidden for fullscreen');
-    } else {
-      StatusBar.setHidden(false, 'fade');
-      console.log('[VideoPlayer] StatusBar shown for normal view');
-    }
-  }, [isFullscreen]);
-
-  // Log bất cứ khi nào state isFullscreen hoặc showControlsOverlay thay đổi
-  useEffect(() => {
-    console.log('[VideoPlayer] State change', {
-      isFullscreen,
-      showControlsOverlay,
-    });
-  }, [isFullscreen, showControlsOverlay]);
-
   const togglePlayPause = async () => {
     try {
       if (isPlaying) {
@@ -232,63 +221,41 @@ export function VideoPlayer({
   };
 
   const toggleMute = () => {
-    try {
-      const newMutedState = !isMuted;
-      player.muted = newMutedState;
-      console.log('[VideoPlayer] Mute toggled to:', newMutedState);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    } catch (error) {
-      console.error('[VideoPlayer] Error toggling mute:', error);
-      onError?.('Không thể thay đổi âm thanh');
-    }
+    player.muted = !isMuted;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   };
 
   const toggleFullscreen = () => {
-    if (!videoRef.current) {
-      console.warn('[VideoPlayer] toggleFullscreen: videoRef.current is null');
-      return;
-    }
+    if (!videoRef.current) return;
 
     const nextState = !isFullscreen;
 
-    try {
-      if (isFullscreen) {
-        videoRef.current.exitFullscreen?.();
-        console.log('[VideoPlayer] exitFullscreen() called');
-      } else {
-        videoRef.current.enterFullscreen?.();
-        console.log('[VideoPlayer] enterFullscreen() called');
-      }
-
-      console.log('[VideoPlayer] isFullscreen state will be set to', nextState);
-      setIsFullscreen(nextState);
-
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    } catch (error) {
-      console.error('[VideoPlayer] toggleFullscreen error:', error);
-      // Fallback: just update state
-      setIsFullscreen(nextState);
+    if (isFullscreen) {
+      videoRef.current.exitFullscreen?.();
+      console.log('[VideoPlayer] exitFullscreen() called');
+    } else {
+      videoRef.current.enterFullscreen?.();
+      console.log('[VideoPlayer] enterFullscreen() called');
     }
+
+    console.log('[VideoPlayer] isFullscreen state will be set to', nextState);
+    setIsFullscreen(nextState);
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
   };
 
   const handleProgressBarPress = (event: any) => {
-    try {
-      if (duration > 0) {
-        const { locationX } = event.nativeEvent;
-        // Estimate progress bar width (we'll set a fixed width in styles)
-        const progressBarWidth = 200; // This will be overridden by flex: 1
-        const percentage = Math.max(0, Math.min(1, locationX / progressBarWidth));
-        const newTime = (percentage * duration) / 1000; // Convert to seconds
-
-        player.currentTime = newTime;
-        setPosition(newTime * 1000);
-
-        console.log('[VideoPlayer] Seeked to:', newTime, 'seconds');
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      }
-    } catch (error) {
-      console.error('[VideoPlayer] Error seeking video:', error);
-      onError?.('Không thể tua video');
+    if (duration > 0) {
+      const { locationX } = event.nativeEvent;
+      // Estimate progress bar width (we'll set a fixed width in styles)
+      const progressBarWidth = 200; // This will be overridden by flex: 1
+      const percentage = Math.max(0, Math.min(1, locationX / progressBarWidth));
+      const newTime = (percentage * duration) / 1000; // Convert to seconds
+      
+      player.currentTime = newTime;
+      setPosition(newTime * 1000);
+      
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     }
   };
 
@@ -327,6 +294,14 @@ export function VideoPlayer({
     );
   }
 
+  // Log bất cứ khi nào state isFullscreen hoặc showControlsOverlay thay đổi
+  useEffect(() => {
+    console.log('[VideoPlayer] State change', {
+      isFullscreen,
+      showControlsOverlay,
+    });
+  }, [isFullscreen, showControlsOverlay]);
+
   return (
     <View style={videoContainerStyle}>
       <TouchableOpacity
@@ -340,19 +315,6 @@ export function VideoPlayer({
           player={player}
           contentFit="contain"
           nativeControls={isFullscreen}
-          onFullscreenExit={() => {
-            try {
-              console.log('[VideoPlayer] onFullscreenExit event triggered');
-              setIsFullscreen(false);
-              setShowControlsOverlay(true);
-              console.log('[VideoPlayer] Successfully handled fullscreen exit');
-            } catch (error) {
-              console.error('[VideoPlayer] Error in onFullscreenExit handler:', error);
-              // Fallback: ensure state is consistent
-              setIsFullscreen(false);
-              setShowControlsOverlay(true);
-            }
-          }}
         />
 
         {/* Loading Indicator */}
