@@ -46,6 +46,11 @@
   - **Conclusion**: Đây là việc tận dụng tính năng fullscreen native của thư viện expo-video, không phải một triển khai fullscreen tùy chỉnh hoàn toàn.
   - **Note**: Thông tin trong bộ nhớ về "custom fullscreen không dùng native system fullscreen" có thể là một yêu cầu ban đầu hoặc ý định thiết kế đã thay đổi.
 
+- ✅ **FIX: Video Playback Reset**:
+  - **Problem**: Video không tự động quay về đầu sau khi phát xong, ngăn người dùng phát lại ngay lập tức.
+  - **Solution**: Sửa đổi `VideoPlayer.tsx` để theo dõi sự kiện `playingChange`. Khi video kết thúc (`isPlaying` trở thành `false` và vị trí phát ở cuối), đặt `player.currentTime = 0` để reset video về đầu.
+  - **Status**: Hoàn thành và đã được kiểm thử.
+
 - ✅ **iOS File Browser Refactor**: Complete rewrite với clean architecture
 - ✅ **Helper Functions**: Tách logic thành `tryiOSURLSchemes()` và `createAndShareMarkerFile()`
 - ✅ **Better Error Handling**: Comprehensive fallback strategies

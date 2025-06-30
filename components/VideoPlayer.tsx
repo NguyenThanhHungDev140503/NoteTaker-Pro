@@ -72,8 +72,19 @@ export function VideoPlayer({
         console.log('Video playing state changed:', payload.isPlaying);
         setIsPlaying(payload.isPlaying);
         setIsLoading(false); // Video is ready when playing state changes
+
+        // ✅ FIX: Reset video to start when it finishes playing
         if (!payload.isPlaying) {
           setShowControlsOverlay(true);
+          // Check if the video stopped because it reached the end
+          const currentTime = player.currentTime;
+          const videoDuration = player.duration;
+          // Add a small tolerance (e.g., 0.5s) to account for timing inaccuracies
+          if (videoDuration && currentTime >= videoDuration - 0.5) {
+            console.log('Video finished, resetting to beginning.');
+            player.currentTime = 0; // Seek to the beginning
+            setPosition(0); // Update our position state as well
+          }
         }
       }
     );
