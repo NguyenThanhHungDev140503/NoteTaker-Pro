@@ -1,0 +1,151 @@
+# SuperNote Project Intelligence
+
+## Project Overview
+SuperNote là ứng dụng ghi chú React Native với Expo, hỗ trợ text, audio, image attachments. Sử dụng Supabase backend và Stripe payments.
+
+## Critical Implementation Paths
+
+### Storage Operations
+- iOS: Sử dụng marker file approach do security restrictions
+- Android: Direct file manager access với Intent Launcher
+- Web: Limited functionality, no direct file access
+
+### Audio Handling
+- Sử dụng expo-av cho recording/playback
+- Format: M4A cho iOS compatibility
+- Cleanup resources sau khi dùng để tránh memory leaks
+
+### State Management
+- React Context API cho global state
+- NotesContext handles all note operations
+- Avoid prop drilling, use context hooks
+
+## User Preferences & Workflow
+
+### Code Style
+- TypeScript strict mode
+- Functional components với hooks
+- Async/await over promises
+- Error boundaries cho critical components
+
+### Testing Approach
+- Unit tests cho services
+- Integration tests cho API calls
+- E2E tests cho user flows
+- Manual testing trên real devices
+
+## Project-Specific Patterns
+
+### File Structure
+```
+feature/
+  ├── components/     # UI components
+  ├── hooks/         # Custom hooks
+  ├── services/      # Business logic
+  └── types/         # TypeScript types
+```
+
+### Naming Conventions
+- Components: PascalCase (NoteCard.tsx)
+- Services: camelCase (noteService.ts)
+- Hooks: use prefix (useNotes.ts)
+- Types: PascalCase với suffix (NoteType.ts)
+
+### Error Handling
+```typescript
+try {
+  // operation
+} catch (error) {
+  console.error('Context:', error);
+  Alert.alert('User-friendly message');
+  // graceful fallback
+}
+```
+
+## Known Challenges & Solutions
+
+### iOS File Browser
+- URL schemes unreliable
+- Use Sharing API as fallback
+- Create marker files for navigation
+- Show detailed instructions to users
+
+### Performance
+- Virtualize long lists
+- Lazy load images
+- Debounce search inputs
+- Cache frequently accessed data
+
+### Cross-Platform
+- Always test on all platforms
+- Use Platform.select() for platform code
+- Abstract platform differences in services
+- Provide fallbacks for unsupported features
+
+## Tool Usage Patterns
+
+### Expo
+- Stick to managed workflow when possible
+- Use EAS Build for production
+- Test với Expo Go during development
+- Check compatibility before adding packages
+
+### Supabase
+- Use Row Level Security (RLS)
+- Handle auth state changes
+- Implement proper error handling
+- Cache user session locally
+
+### Development Workflow
+1. Create feature branch
+2. Implement với Memory Bank context
+3. Test on all platforms
+4. Update relevant documentation
+5. Create pull request
+
+## Evolution & Decisions
+
+### 2024-01 - Initial Architecture
+- Chose Expo for faster development
+- React Context over Redux for simplicity
+- Supabase over Firebase for open source
+
+### Current Focus
+- Fixing iOS file browser issues
+- Improving error handling
+- Planning sync architecture
+- Optimizing performance
+
+## Important Notes
+
+### Security
+- Never commit env files
+- Use secure storage for tokens
+- Validate all user inputs
+- Implement proper permissions
+
+### User Experience
+- Prioritize offline functionality
+- Show loading states always
+- Provide clear error messages
+- Make UI responsive và accessible
+
+### Performance
+- Monitor bundle size
+- Profile memory usage
+- Optimize re-renders
+- Cache expensive operations
+
+## Future Considerations
+
+### Scaling
+- Consider Redux if state grows
+- Implement code splitting
+- Add performance monitoring
+- Plan for i18n support
+
+### Features
+- AI integration planning
+- Collaboration features
+- Advanced search với Elasticsearch
+- API platform for developers 

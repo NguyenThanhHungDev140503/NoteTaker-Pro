@@ -19,13 +19,17 @@ interface SubscriptionCardProps {
   onPurchaseComplete?: () => void;
 }
 
-export function SubscriptionCard({ userSubscription, onPurchaseComplete }: SubscriptionCardProps) {
+export function SubscriptionCard({
+  userSubscription,
+  onPurchaseComplete,
+}: SubscriptionCardProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
   const product = stripeProducts[0]; // SuperNote Premium
-  const isActive = userSubscription?.subscription_status === 'active' || 
-                   userSubscription?.price_id === product.priceId;
+  const isActive =
+    userSubscription?.subscription_status === 'active' ||
+    userSubscription?.price_id === product.priceId;
 
   const handlePurchase = async () => {
     setIsLoading(true);
@@ -92,7 +96,10 @@ export function SubscriptionCard({ userSubscription, onPurchaseComplete }: Subsc
 
       {!isActive && (
         <TouchableOpacity
-          style={[styles.purchaseButton, isLoading && styles.purchaseButtonDisabled]}
+          style={[
+            styles.purchaseButton,
+            isLoading && styles.purchaseButtonDisabled,
+          ]}
           onPress={handlePurchase}
           disabled={isLoading}
         >

@@ -51,12 +51,12 @@ export function AudioRecorder({
       const audioDir = await createPersistentAudioDirectory();
       const fileName = `audio_${Date.now()}_${Math.random().toString(36).substring(7)}.m4a`;
       const persistentUri = `${audioDir}${fileName}`;
-      
+
       await FileSystem.copyAsync({
         from: tempUri,
-        to: persistentUri
+        to: persistentUri,
       });
-      
+
       return persistentUri;
     } catch (error) {
       console.error('Failed to move audio to persistent storage:', error);
@@ -78,7 +78,7 @@ export function AudioRecorder({
       });
 
       const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
+        Audio.RecordingOptionsPresets.HIGH_QUALITY,
       );
 
       setRecording(newRecording);
@@ -87,7 +87,7 @@ export function AudioRecorder({
 
       // Start duration timer
       durationInterval.current = setInterval(() => {
-        setRecordingDuration(prev => prev + 1);
+        setRecordingDuration((prev) => prev + 1);
       }, 1000);
 
       if (Platform.OS !== 'web') {
@@ -149,10 +149,7 @@ export function AudioRecorder({
   return (
     <View style={styles.container}>
       <TouchableOpacity
-        style={[
-          styles.recordButton,
-          isRecording && styles.recordButtonActive,
-        ]}
+        style={[styles.recordButton, isRecording && styles.recordButtonActive]}
         onPress={isRecording ? stopRecording : startRecording}
       >
         {isRecording ? (

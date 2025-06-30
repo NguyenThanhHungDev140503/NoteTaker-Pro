@@ -16,16 +16,32 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Star, Share, Pencil, Calendar, Camera, Mic, Play, X, ChevronLeft, ChevronRight, Save, Circle as XCircle } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Star,
+  Share,
+  Pencil,
+  Calendar,
+  Camera,
+  Mic,
+  Play,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Save,
+  Circle as XCircle,
+  Video,
+} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Note } from '@/types/note';
 import { useNote } from '@/contexts/NotesContext';
 import { AudioPlayer } from '@/components/AudioPlayer';
 import { MediaPicker } from '@/components/MediaPicker';
 import { AudioRecorder } from '@/components/AudioRecorder';
+import { VideoPlayer } from '@/components/VideoPlayer';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, { 
-  useSharedValue, 
+import Animated, {
+  useSharedValue,
   useAnimatedStyle,
   withSpring,
   runOnJS,
@@ -39,25 +55,30 @@ const SWIPE_THRESHOLD = 50;
 
 export default function NoteDetailScreen() {
   const { noteId } = useLocalSearchParams<{ noteId: string }>();
-  const { note, updateNote, toggleFavorite, isFavoriteLoading } = useNote(noteId || '');
-  
+  const { note, updateNote, toggleFavorite, isFavoriteLoading } = useNote(
+    noteId || '',
+  );
+
   const [loading, setLoading] = useState(!note);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
   const [isGestureActive, setIsGestureActive] = useState(false);
-  
+
   // Edit mode state - FIXED: Ensure proper initialization
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState('');
   const [editedContent, setEditedContent] = useState('');
   const [editedImages, setEditedImages] = useState<string[]>([]);
-  const [editedAudioRecordings, setEditedAudioRecordings] = useState<string[]>([]);
+  const [editedAudioRecordings, setEditedAudioRecordings] = useState<string[]>(
+    [],
+  );
+  const [editedVideos, setEditedVideos] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  
+
   // Component mounted ref (JS thread only)
   const isMountedRef = useRef(true);
-  
+
   // Use shared values for all animation/gesture state
   const translateX = useSharedValue(0);
   const scale = useSharedValue(1);
@@ -69,12 +90,12 @@ export default function NoteDetailScreen() {
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
-      
+
       // Reset StatusBar when component unmounts
       if (Platform.OS === 'ios' || Platform.OS === 'android') {
         StatusBar.setHidden(false);
       }
-      
+
       // Cancel any running animations
       try {
         cancelAnimation(translateX);
@@ -84,46 +105,47 @@ export default function NoteDetailScreen() {
         console.warn('Animation cleanup error:', error);
       }
     };
-  }, []);
+  }, [opacity, scale, translateX]);
 
   // FIXED: Enhanced note data initialization with proper edit state reset
   useEffect(() => {
     if (note) {
       setLoading(false);
-      
+
       // Initialize edit state with current note data
       setEditedTitle(note.title || '');
       setEditedContent(note.content || '');
       setEditedImages([...note.images]);
       setEditedAudioRecordings([...note.audioRecordings]);
-      
+      setEditedVideos([...note.videos]);
+
       // CRITICAL FIX: Ensure edit mode is always reset when note loads
       if (isEditing) {
         console.log('Resetting edit mode on note load');
         setIsEditing(false);
       }
     }
-  }, [note?.id, note?.title, note?.content]); // Track specific properties for proper updates
+  }, [note, isEditing]); // Track specific properties for proper updates
 
   // FIXED: Add debug effect to track edit state
   useEffect(() => {
-    console.log('Edit state changed:', { 
-      isEditing, 
-      isSaving, 
+    console.log('Edit state changed:', {
+      isEditing,
+      isSaving,
       noteId: note?.id,
-      hasNote: !!note 
+      hasNote: !!note,
     });
-  }, [isEditing, isSaving, note?.id]);
-  
+  }, [isEditing, isSaving, note]);
+
   // Clean up animations function
   const resetAnimations = () => {
     if (!isMountedRef.current) return;
-    
+
     try {
       cancelAnimation(translateX);
       cancelAnimation(scale);
       cancelAnimation(opacity);
-      
+
       translateX.value = 0;
       scale.value = 1;
       opacity.value = 1;
@@ -137,7 +159,7 @@ export default function NoteDetailScreen() {
   // Safe index validation
   const safeSetSelectedImageIndex = (newIndex: number) => {
     if (!isMountedRef.current || !note?.images?.length) return;
-    
+
     const safeIndex = Math.max(0, Math.min(newIndex, note.images.length - 1));
     setSelectedImageIndex(safeIndex);
   };
@@ -145,24 +167,24 @@ export default function NoteDetailScreen() {
   const goToPreviousImage = () => {
     if (!isMountedRef.current || !note?.images?.length) return;
     safeSetSelectedImageIndex(
-      selectedImageIndex > 0 ? selectedImageIndex - 1 : note.images.length - 1
+      selectedImageIndex > 0 ? selectedImageIndex - 1 : note.images.length - 1,
     );
   };
 
   const goToNextImage = () => {
     if (!isMountedRef.current || !note?.images?.length) return;
     safeSetSelectedImageIndex(
-      selectedImageIndex < note.images.length - 1 ? selectedImageIndex + 1 : 0
+      selectedImageIndex < note.images.length - 1 ? selectedImageIndex + 1 : 0,
     );
   };
 
   // Safer animation functions without complex callbacks
   const handlePreviousImage = () => {
     if (!isMountedRef.current || !note?.images?.length) return;
-    
+
     // Update index directly first
     goToPreviousImage();
-    
+
     // Then animate with simple spring
     try {
       setTimeout(() => {
@@ -170,11 +192,11 @@ export default function NoteDetailScreen() {
           translateX.value = screenWidth;
           translateX.value = withSpring(0, {
             damping: 20,
-            stiffness: 90
+            stiffness: 90,
           });
           scale.value = withSpring(1);
           opacity.value = withSpring(1);
-          
+
           // Reset animation flag after animation completes
           setTimeout(() => {
             if (isMountedRef.current) {
@@ -191,10 +213,10 @@ export default function NoteDetailScreen() {
 
   const handleNextImage = () => {
     if (!isMountedRef.current || !note?.images?.length) return;
-    
+
     // Update index directly first
     goToNextImage();
-    
+
     // Then animate with simple spring
     try {
       setTimeout(() => {
@@ -202,11 +224,11 @@ export default function NoteDetailScreen() {
           translateX.value = -screenWidth;
           translateX.value = withSpring(0, {
             damping: 20,
-            stiffness: 90
+            stiffness: 90,
           });
           scale.value = withSpring(1);
           opacity.value = withSpring(1);
-          
+
           // Reset animation flag after animation completes
           setTimeout(() => {
             if (isMountedRef.current) {
@@ -226,24 +248,33 @@ export default function NoteDetailScreen() {
     .onStart(() => {
       'worklet';
       if (isAnimating.value) return;
-      
+
       gestureActive.value = true;
       runOnJS(setIsGestureActive)(true);
     })
     .onUpdate((event) => {
       'worklet';
-      if (isAnimating.value || !event || !note?.images?.length || note.images.length <= 1) return;
-      
+      if (
+        isAnimating.value ||
+        !event ||
+        !note?.images?.length ||
+        note.images.length <= 1
+      )
+        return;
+
       try {
         // Only handle horizontal swipes
         if (Math.abs(event.translationY) > Math.abs(event.translationX)) {
           return;
         }
-        
+
         // Limit translation to prevent extreme values
-        const limitedTranslationX = Math.max(-screenWidth, Math.min(screenWidth, event.translationX));
+        const limitedTranslationX = Math.max(
+          -screenWidth,
+          Math.min(screenWidth, event.translationX),
+        );
         translateX.value = limitedTranslationX;
-        
+
         // Add subtle scale effect during swipe
         const progress = Math.abs(limitedTranslationX) / screenWidth;
         scale.value = interpolate(progress, [0, 0.5], [1, 0.95], 'clamp');
@@ -257,15 +288,19 @@ export default function NoteDetailScreen() {
     })
     .onEnd((event) => {
       'worklet';
-      if (isAnimating.value || !note?.images?.length || note.images.length <= 1) {
+      if (
+        isAnimating.value ||
+        !note?.images?.length ||
+        note.images.length <= 1
+      ) {
         gestureActive.value = false;
         runOnJS(setIsGestureActive)(false);
         return;
       }
-      
+
       try {
         const shouldNavigate = Math.abs(event.translationX) > SWIPE_THRESHOLD;
-        
+
         if (shouldNavigate) {
           isAnimating.value = true;
           if (event.translationX > 0) {
@@ -288,7 +323,7 @@ export default function NoteDetailScreen() {
         scale.value = 1;
         opacity.value = 1;
       }
-      
+
       gestureActive.value = false;
       runOnJS(setIsGestureActive)(false);
     })
@@ -301,15 +336,14 @@ export default function NoteDetailScreen() {
 
   const handleToggleFavorite = async () => {
     if (!note || isFavoriteLoading) return;
-    
+
     try {
       await toggleFavorite();
-      
+
       // Visual feedback
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
-      
     } catch (error) {
       // Error is already handled in the context
     }
@@ -329,7 +363,7 @@ export default function NoteDetailScreen() {
   // FIXED: Enhanced edit toggle with better state management
   const handleEditToggle = () => {
     console.log('Edit toggle clicked, current state:', { isEditing, isSaving });
-    
+
     if (isSaving) {
       console.log('Cannot toggle edit mode while saving');
       return;
@@ -337,11 +371,13 @@ export default function NoteDetailScreen() {
 
     if (isEditing) {
       // Cancel editing - Check if there are unsaved changes
-      const hasChanges = 
+      const hasChanges =
         editedTitle !== (note?.title || '') ||
         editedContent !== (note?.content || '') ||
         JSON.stringify(editedImages) !== JSON.stringify(note?.images || []) ||
-        JSON.stringify(editedAudioRecordings) !== JSON.stringify(note?.audioRecordings || []);
+        JSON.stringify(editedAudioRecordings) !==
+          JSON.stringify(note?.audioRecordings || []) ||
+        JSON.stringify(editedVideos) !== JSON.stringify(note?.videos || []);
 
       console.log('Has unsaved changes:', hasChanges);
 
@@ -351,8 +387,8 @@ export default function NoteDetailScreen() {
           'You have unsaved changes. Are you sure you want to discard them?',
           [
             { text: 'Keep Editing', style: 'cancel' },
-            { 
-              text: 'Discard Changes', 
+            {
+              text: 'Discard Changes',
               style: 'destructive',
               onPress: () => {
                 console.log('Discarding changes and exiting edit mode');
@@ -362,11 +398,12 @@ export default function NoteDetailScreen() {
                   setEditedContent(note.content || '');
                   setEditedImages([...note.images]);
                   setEditedAudioRecordings([...note.audioRecordings]);
+                  setEditedVideos([...note.videos]);
                 }
                 setIsEditing(false);
-              }
+              },
             },
-          ]
+          ],
         );
       } else {
         // No changes, safe to exit
@@ -400,16 +437,17 @@ export default function NoteDetailScreen() {
         content: editedContent.trim(),
         images: editedImages,
         audioRecordings: editedAudioRecordings,
+        videos: editedVideos,
       };
 
       console.log('Saving updates:', updates);
       await updateNote(updates);
-      
+
       console.log('Save successful, resetting edit state');
-      
+
       // CRITICAL FIX: Reset editing state immediately after successful save
       setIsEditing(false);
-      
+
       // Then provide feedback
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -421,7 +459,6 @@ export default function NoteDetailScreen() {
           Alert.alert('Success', 'Note updated successfully!');
         }
       }, 150);
-
     } catch (error) {
       console.error('Save error:', error);
       if (isMountedRef.current) {
@@ -436,52 +473,65 @@ export default function NoteDetailScreen() {
   };
 
   const handleImagePress = (index: number) => {
-    if (!isMountedRef.current || !note?.images?.length || index < 0 || index >= note.images.length) {
+    if (
+      !isMountedRef.current ||
+      !note?.images?.length ||
+      index < 0 ||
+      index >= note.images.length
+    ) {
       console.warn('Invalid image index:', index);
       return;
     }
-    
+
     safeSetSelectedImageIndex(index);
     setIsImageViewerVisible(true);
-    
+
     // Hide status bar
     if (Platform.OS === 'ios' || Platform.OS === 'android') {
       StatusBar.setHidden(true);
     }
-    
+
     // Reset animation values
     resetAnimations();
   };
 
   const closeImageViewer = () => {
     if (!isMountedRef.current || gestureActive.value) return; // Don't close during gesture
-    
+
     setIsImageViewerVisible(false);
-    
+
     // Restore status bar
     if (Platform.OS === 'ios' || Platform.OS === 'android') {
       StatusBar.setHidden(false);
     }
-    
+
     // Reset animation values
     resetAnimations();
   };
 
   // Edit mode handlers
   const handleImagePicked = (imageUri: string) => {
-    setEditedImages(prev => [...prev, imageUri]);
+    setEditedImages((prev) => [...prev, imageUri]);
   };
 
   const handleAudioRecorded = (audioUri: string) => {
-    setEditedAudioRecordings(prev => [...prev, audioUri]);
+    setEditedAudioRecordings((prev) => [...prev, audioUri]);
+  };
+
+  const handleVideoPicked = (videoUri: string) => {
+    setEditedVideos((prev) => [...prev, videoUri]);
   };
 
   const removeEditedImage = (index: number) => {
-    setEditedImages(prev => prev.filter((_, i) => i !== index));
+    setEditedImages((prev) => prev.filter((_, i) => i !== index));
   };
 
   const removeEditedAudio = (index: number) => {
-    setEditedAudioRecordings(prev => prev.filter((_, i) => i !== index));
+    setEditedAudioRecordings((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const removeEditedVideo = (index: number) => {
+    setEditedVideos((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Audio delete handler based on mode
@@ -492,7 +542,7 @@ export default function NoteDetailScreen() {
       Alert.alert(
         'Cannot Delete',
         'Audio recordings cannot be deleted from the view mode. Please edit the note to remove recordings.',
-        [{ text: 'OK' }]
+        [{ text: 'OK' }],
       );
     }
   };
@@ -503,17 +553,14 @@ export default function NoteDetailScreen() {
       return {
         transform: [
           { translateX: translateX.value || 0 },
-          { scale: scale.value || 1 }
+          { scale: scale.value || 1 },
         ],
         opacity: opacity.value || 1,
       };
     } catch (error) {
       // Silent error but return safe defaults
       return {
-        transform: [
-          { translateX: 0 },
-          { scale: 1 }
-        ],
+        transform: [{ translateX: 0 }, { scale: 1 }],
         opacity: 1,
       };
     }
@@ -535,7 +582,10 @@ export default function NoteDetailScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Note not found</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
             <Text style={styles.backButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
@@ -547,7 +597,8 @@ export default function NoteDetailScreen() {
   const debugInfo = __DEV__ ? (
     <View style={styles.debugContainer}>
       <Text style={styles.debugText}>
-        Edit Mode: {isEditing ? 'ON' : 'OFF'} | Saving: {isSaving ? 'YES' : 'NO'}
+        Edit Mode: {isEditing ? 'ON' : 'OFF'} | Saving:{' '}
+        {isSaving ? 'YES' : 'NO'}
       </Text>
     </View>
   ) : null;
@@ -555,17 +606,20 @@ export default function NoteDetailScreen() {
   return (
     <SafeAreaView style={styles.container}>
       {debugInfo}
-      
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <ArrowLeft size={24} color="#1F2937" />
         </TouchableOpacity>
-        
+
         <View style={styles.headerActions}>
-          <TouchableOpacity 
-            onPress={handleToggleFavorite} 
-            style={[styles.headerAction, isFavoriteLoading && styles.headerActionDisabled]}
+          <TouchableOpacity
+            onPress={handleToggleFavorite}
+            style={[
+              styles.headerAction,
+              isFavoriteLoading && styles.headerActionDisabled,
+            ]}
             disabled={isFavoriteLoading}
           >
             {isFavoriteLoading ? (
@@ -578,23 +632,23 @@ export default function NoteDetailScreen() {
               />
             )}
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.headerAction}>
             <Share size={24} color="#9CA3AF" />
           </TouchableOpacity>
-          
+
           {/* UPDATED: Enhanced edit button with Pencil icon */}
           {isEditing ? (
             <View style={styles.editActions}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.cancelButton, isSaving && styles.disabledButton]}
                 onPress={handleEditToggle}
                 disabled={isSaving}
               >
                 <XCircle size={20} color="#FF3B30" />
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[styles.saveButton, isSaving && styles.disabledButton]}
                 onPress={handleSaveChanges}
                 disabled={isSaving}
@@ -607,8 +661,8 @@ export default function NoteDetailScreen() {
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity 
-              style={styles.headerAction} 
+            <TouchableOpacity
+              style={styles.headerAction}
               onPress={handleEditToggle}
               testID="edit-button"
             >
@@ -632,17 +686,19 @@ export default function NoteDetailScreen() {
         ) : (
           <Text style={styles.title}>{note.title || 'Untitled Note'}</Text>
         )}
-        
+
         {/* Date */}
         <View style={styles.dateContainer}>
           <Calendar size={16} color="#6B7280" />
           <Text style={styles.date}>Created {formatDate(note.createdAt)}</Text>
         </View>
-        
+
         {note.createdAt !== note.updatedAt && (
           <View style={styles.dateContainer}>
             <Calendar size={16} color="#6B7280" />
-            <Text style={styles.date}>Updated {formatDate(note.updatedAt)}</Text>
+            <Text style={styles.date}>
+              Updated {formatDate(note.updatedAt)}
+            </Text>
           </View>
         )}
 
@@ -669,7 +725,7 @@ export default function NoteDetailScreen() {
                 Images ({(isEditing ? editedImages : note.images).length})
               </Text>
             </View>
-            
+
             <View style={styles.imagesGrid}>
               {(isEditing ? editedImages : note.images).map((uri, index) => (
                 <View key={index} style={styles.imageContainer}>
@@ -678,16 +734,16 @@ export default function NoteDetailScreen() {
                     onPress={() => handleImagePress(index)}
                     activeOpacity={0.8}
                   >
-                    <Image 
-                      source={{ uri }} 
-                      style={styles.image} 
+                    <Image
+                      source={{ uri }}
+                      style={styles.image}
                       resizeMode="cover"
                     />
                     <View style={styles.imageOverlay}>
                       <Text style={styles.imageNumber}>{index + 1}</Text>
                     </View>
                   </TouchableOpacity>
-                  
+
                   {isEditing && (
                     <TouchableOpacity
                       style={styles.removeImageButton}
@@ -711,23 +767,31 @@ export default function NoteDetailScreen() {
         )}
 
         {/* Audio Recordings with Enhanced Player */}
-        {(isEditing ? editedAudioRecordings : note.audioRecordings).length > 0 && (
+        {(isEditing ? editedAudioRecordings : note.audioRecordings).length >
+          0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Mic size={20} color="#007AFF" />
               <Text style={styles.sectionTitle}>
-                Audio Recordings ({(isEditing ? editedAudioRecordings : note.audioRecordings).length})
+                Audio Recordings (
+                {
+                  (isEditing ? editedAudioRecordings : note.audioRecordings)
+                    .length
+                }
+                )
               </Text>
             </View>
-            
-            {(isEditing ? editedAudioRecordings : note.audioRecordings).map((uri, index) => (
-              <AudioPlayer
-                key={`${uri}-${index}`}
-                uri={uri}
-                index={index}
-                onDelete={handleDeleteAudio}
-              />
-            ))}
+
+            {(isEditing ? editedAudioRecordings : note.audioRecordings).map(
+              (uri, index) => (
+                <AudioPlayer
+                  key={`${uri}-${index}`}
+                  uri={uri}
+                  index={index}
+                  onDelete={handleDeleteAudio}
+                />
+              ),
+            )}
           </View>
         )}
 
@@ -738,6 +802,53 @@ export default function NoteDetailScreen() {
               onAudioRecorded={handleAudioRecorded}
               isRecording={isRecording}
               onRecordingStateChange={setIsRecording}
+            />
+          </View>
+        )}
+
+        {/* Video Recordings */}
+        {(isEditing ? editedVideos : note.videos).length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Video size={20} color="#8B5CF6" />
+              <Text style={styles.sectionTitle}>
+                Videos ({(isEditing ? editedVideos : note.videos).length})
+              </Text>
+            </View>
+
+            {(isEditing ? editedVideos : note.videos).map((uri, index) => (
+              <View key={`${uri}-${index}`} style={styles.videoItem}>
+                <VideoPlayer
+                  videoUri={uri}
+                  style={styles.videoPreview}
+                  autoPlay={false}
+                  showControls={true}
+                  onError={(error) => {
+                    console.error('Video playback error:', error);
+                    Alert.alert('Error', 'Failed to play video');
+                  }}
+                />
+                {isEditing && (
+                  <TouchableOpacity
+                    style={styles.removeVideoButton}
+                    onPress={() => removeEditedVideo(index)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <X size={16} color="#FFFFFF" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Add Video in Edit Mode */}
+        {isEditing && (
+          <View style={styles.section}>
+            <MediaPicker
+              onImagePicked={handleImagePicked}
+              onVideoPicked={handleVideoPicked}
+              showVideoOptions={true}
             />
           </View>
         )}
@@ -758,98 +869,111 @@ export default function NoteDetailScreen() {
       </ScrollView>
 
       {/* Full Screen Image Viewer Modal with Swipe Gesture */}
-      {isImageViewerVisible && note?.images && note.images.length > 0 && selectedImageIndex >= 0 && selectedImageIndex < note.images.length && (
-        <Modal
-          visible={isImageViewerVisible}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={closeImageViewer}
-          statusBarTranslucent={true}
-          onDismiss={resetAnimations}
-        >
-          <StatusBar hidden={true} />
-          <View style={styles.imageViewer}>
-            {/* Header Controls */}
-            <View style={styles.imageViewerHeader}>
-              <TouchableOpacity 
-                style={styles.closeButton} 
-                onPress={closeImageViewer}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                disabled={isGestureActive}
-              >
-                <X size={28} color="#FFFFFF" />
-              </TouchableOpacity>
-              
-              <Text style={styles.imageCounter}>
-                {selectedImageIndex + 1} / {note.images.length}
-              </Text>
-              
-              {/* Swipe indicator */}
+      {isImageViewerVisible &&
+        note?.images &&
+        note.images.length > 0 &&
+        selectedImageIndex >= 0 &&
+        selectedImageIndex < note.images.length && (
+          <Modal
+            visible={isImageViewerVisible}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={closeImageViewer}
+            statusBarTranslucent={true}
+            onDismiss={resetAnimations}
+          >
+            <StatusBar hidden={true} />
+            <View style={styles.imageViewer}>
+              {/* Header Controls */}
+              <View style={styles.imageViewerHeader}>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={closeImageViewer}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  disabled={isGestureActive}
+                >
+                  <X size={28} color="#FFFFFF" />
+                </TouchableOpacity>
+
+                <Text style={styles.imageCounter}>
+                  {selectedImageIndex + 1} / {note.images.length}
+                </Text>
+
+                {/* Swipe indicator */}
+                {note.images.length > 1 && (
+                  <Text style={styles.swipeHint}>Swipe to navigate</Text>
+                )}
+              </View>
+
+              {/* Main Image Display with Gesture */}
+              <GestureDetector gesture={panGesture}>
+                <Animated.View
+                  style={[styles.imageViewerContent, animatedImageStyle]}
+                >
+                  <TouchableOpacity
+                    style={styles.imageViewerContentTouch}
+                    activeOpacity={1}
+                    onPress={!isGestureActive ? closeImageViewer : undefined}
+                  >
+                    <Image
+                      source={{ uri: note.images[selectedImageIndex] }}
+                      style={styles.fullScreenImage}
+                      resizeMode="contain"
+                      onError={(error) =>
+                        console.warn(
+                          'Image load error:',
+                          error.nativeEvent?.error || 'Unknown error',
+                        )
+                      }
+                    />
+                  </TouchableOpacity>
+                </Animated.View>
+              </GestureDetector>
+
+              {/* Navigation Controls - Still available as backup */}
+              {note.images.length > 1 && !isGestureActive && (
+                <>
+                  <TouchableOpacity
+                    style={[styles.navButton, styles.navButtonLeft]}
+                    onPress={handlePreviousImage}
+                    hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                    disabled={isGestureActive}
+                  >
+                    <ChevronLeft size={32} color="#FFFFFF" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.navButton, styles.navButtonRight]}
+                    onPress={handleNextImage}
+                    hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                    disabled={isGestureActive}
+                  >
+                    <ChevronRight size={32} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {/* Image Indicators */}
               {note.images.length > 1 && (
-                <Text style={styles.swipeHint}>Swipe to navigate</Text>
+                <View style={styles.imageIndicators}>
+                  {note.images.map((_, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.indicator,
+                        selectedImageIndex === index && styles.activeIndicator,
+                      ]}
+                      onPress={() =>
+                        !isGestureActive && safeSetSelectedImageIndex(index)
+                      }
+                      disabled={isGestureActive}
+                    />
+                  ))}
+                </View>
               )}
             </View>
-
-            {/* Main Image Display with Gesture */}
-            <GestureDetector gesture={panGesture}>
-              <Animated.View style={[styles.imageViewerContent, animatedImageStyle]}>
-                <TouchableOpacity 
-                  style={styles.imageViewerContentTouch}
-                  activeOpacity={1}
-                  onPress={!isGestureActive ? closeImageViewer : undefined}
-                >
-                  <Image 
-                    source={{ uri: note.images[selectedImageIndex] }} 
-                    style={styles.fullScreenImage}
-                    resizeMode="contain"
-                    onError={(error) => console.warn('Image load error:', error.nativeEvent?.error || 'Unknown error')}
-                  />
-                </TouchableOpacity>
-              </Animated.View>
-            </GestureDetector>
-
-            {/* Navigation Controls - Still available as backup */}
-            {note.images.length > 1 && !isGestureActive && (
-              <>
-                <TouchableOpacity 
-                  style={[styles.navButton, styles.navButtonLeft]} 
-                  onPress={handlePreviousImage}
-                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-                  disabled={isGestureActive}
-                >
-                  <ChevronLeft size={32} color="#FFFFFF" />
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.navButton, styles.navButtonRight]} 
-                  onPress={handleNextImage}
-                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-                  disabled={isGestureActive}
-                >
-                  <ChevronRight size={32} color="#FFFFFF" />
-                </TouchableOpacity>
-              </>
-            )}
-
-            {/* Image Indicators */}
-            {note.images.length > 1 && (
-              <View style={styles.imageIndicators}>
-                {note.images.map((_, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={[
-                      styles.indicator,
-                      selectedImageIndex === index && styles.activeIndicator
-                    ]}
-                    onPress={() => !isGestureActive && safeSetSelectedImageIndex(index)}
-                    disabled={isGestureActive}
-                  />
-                ))}
-              </View>
-            )}
-          </View>
-        </Modal>
-      )}
+          </Modal>
+        )}
     </SafeAreaView>
   );
 }
@@ -1181,5 +1305,36 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
+  },
+  videoItem: {
+    position: 'relative',
+    marginBottom: 12,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  videoPreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    backgroundColor: '#000000',
+  },
+  removeVideoButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#FF3B30',
+    borderRadius: 14,
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
 });

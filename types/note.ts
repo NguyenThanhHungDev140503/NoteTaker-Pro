@@ -6,6 +6,7 @@ export interface Note {
   updatedAt: string;
   images: string[];
   audioRecordings: string[];
+  videos: string[];
   isFavorite: boolean;
   tags: string[];
 }

@@ -33,3 +33,4 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+.roo/mcp.json

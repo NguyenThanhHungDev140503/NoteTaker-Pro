@@ -51,11 +51,12 @@ export default function PaymentSuccessScreen() {
 
         <Text style={styles.title}>Payment Successful!</Text>
         <Text style={styles.subtitle}>
-          Thank you for your purchase. Your SuperNote Premium features are now active.
+          Thank you for your purchase. Your SuperNote Premium features are now
+          active.
         </Text>
 
         <View style={styles.featuresContainer}>
-          <Text style={styles.featuresTitle}>What's included:</Text>
+          <Text style={styles.featuresTitle}>What&apos;s included:</Text>
           <Text style={styles.featureItem}>• Cloud synchronization</Text>
           <Text style={styles.featureItem}>• Automatic backup</Text>
           <Text style={styles.featureItem}>• Unlimited storage</Text>
@@ -63,12 +64,18 @@ export default function PaymentSuccessScreen() {
         </View>
 
         <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.primaryButton} onPress={handleGoToNotes}>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleGoToNotes}
+          >
             <FileText size={20} color="#FFFFFF" />
             <Text style={styles.primaryButtonText}>View My Notes</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.secondaryButton} onPress={handleGoHome}>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={handleGoHome}
+          >
             <Home size={20} color="#007AFF" />
             <Text style={styles.secondaryButtonText}>Go to Home</Text>
           </TouchableOpacity>

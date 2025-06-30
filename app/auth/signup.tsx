@@ -130,7 +130,10 @@ export default function SignupScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.signupButton, isLoading && styles.signupButtonDisabled]}
+              style={[
+                styles.signupButton,
+                isLoading && styles.signupButtonDisabled,
+              ]}
               onPress={handleSignup}
               disabled={isLoading}
             >

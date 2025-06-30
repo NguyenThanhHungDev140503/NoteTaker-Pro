@@ -21,9 +21,11 @@ export const stripeProducts: StripeProduct[] = [
 ];
 
 export function getProductById(id: string): StripeProduct | undefined {
-  return stripeProducts.find(product => product.id === id);
+  return stripeProducts.find((product) => product.id === id);
 }
 
-export function getProductByPriceId(priceId: string): StripeProduct | undefined {
-  return stripeProducts.find(product => product.priceId === priceId);
+export function getProductByPriceId(
+  priceId: string,
+): StripeProduct | undefined {
+  return stripeProducts.find((product) => product.priceId === priceId);
 }

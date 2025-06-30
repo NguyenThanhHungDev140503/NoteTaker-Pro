@@ -16,18 +16,18 @@ import { useNotes } from '@/contexts/NotesContext';
 import { useNotesSync } from '@/hooks/useNotesSync';
 
 export default function HomeScreen() {
-  const { 
-    notes, 
-    loading, 
-    error, 
-    getFavoriteNotes, 
-    getRecentNotes, 
-    searchNotes, 
-    refreshNotes 
+  const {
+    notes,
+    loading,
+    error,
+    getFavoriteNotes,
+    getRecentNotes,
+    searchNotes,
+    refreshNotes,
   } = useNotes();
-  
+
   useNotesSync(); // Auto-sync when app becomes active
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -55,7 +55,10 @@ export default function HomeScreen() {
           <Text style={styles.title}>Welcome Back</Text>
           <Text style={styles.subtitle}>NoteTaker-Pro</Text>
         </View>
-        <TouchableOpacity style={styles.createButton} onPress={handleCreateNote}>
+        <TouchableOpacity
+          style={styles.createButton}
+          onPress={handleCreateNote}
+        >
           <Plus size={24} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
@@ -66,8 +69,8 @@ export default function HomeScreen() {
         placeholder="Search your notes..."
       />
 
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -91,7 +94,9 @@ export default function HomeScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Search size={20} color="#007AFF" />
-              <Text style={styles.sectionTitle}>Search Results ({filteredNotes.length})</Text>
+              <Text style={styles.sectionTitle}>
+                Search Results ({filteredNotes.length})
+              </Text>
             </View>
             {filteredNotes.length > 0 ? (
               filteredNotes.map((note) => (
@@ -100,7 +105,9 @@ export default function HomeScreen() {
             ) : (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyText}>No notes found</Text>
-                <Text style={styles.emptySubtext}>Try a different search term</Text>
+                <Text style={styles.emptySubtext}>
+                  Try a different search term
+                </Text>
               </View>
             )}
           </View>
@@ -110,7 +117,9 @@ export default function HomeScreen() {
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Star size={20} color="#FFD700" />
-                  <Text style={styles.sectionTitle}>Favorites ({favoriteNotes.length})</Text>
+                  <Text style={styles.sectionTitle}>
+                    Favorites ({favoriteNotes.length})
+                  </Text>
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {favoriteNotes.map((note) => (
@@ -125,7 +134,9 @@ export default function HomeScreen() {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Clock size={20} color="#007AFF" />
-                <Text style={styles.sectionTitle}>Recent Notes ({recentNotes.length})</Text>
+                <Text style={styles.sectionTitle}>
+                  Recent Notes ({recentNotes.length})
+                </Text>
               </View>
               {recentNotes.length > 0 ? (
                 recentNotes.map((note) => (
@@ -143,11 +154,13 @@ export default function HomeScreen() {
 
             {notes.length > 5 && !searchQuery && (
               <View style={styles.section}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.viewAllButton}
                   onPress={() => router.push('/(tabs)/notes')}
                 >
-                  <Text style={styles.viewAllText}>View All Notes ({notes.length})</Text>
+                  <Text style={styles.viewAllText}>
+                    View All Notes ({notes.length})
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
