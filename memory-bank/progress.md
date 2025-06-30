@@ -14,6 +14,7 @@
 - ✅ **Videos**: Recording, playback, library selection, video management
   - **VideoRecorder**: Camera controls, quality settings, duration limits
   - **VideoPlayer**: Full controls, fullscreen (sử dụng tính năng native của expo-video), seeking, volume
+    - **FIX**: Video now correctly resets to the beginning after playback finishes, allowing for immediate replay.
   - **Integration**: Seamless creation/editing workflows
 
 ### Storage & Sync
