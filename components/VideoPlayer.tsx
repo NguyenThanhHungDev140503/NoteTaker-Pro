@@ -100,43 +100,6 @@ export function VideoPlayer({
       }
     });
 
-    // Listen for fullscreen changes initiated outside of our custom controls
-    // Some versions of expo-video may not type "fullscreenChange" event officially,
-    // so we cast player to any to avoid TypeScript error.
-    let fsSubscription: { remove: () => void } | undefined;
-    try {
-      // @ts-ignore - dynamic event name
-      fsSubscription = (player as any).addListener(
-        'fullscreenChange',
-        (payload: any) => {
-          // Some platforms emit { fullscreen: boolean } or { isFullscreen: boolean }
-          const fullscreen =
-            payload?.fullscreen ?? payload?.isFullscreen ?? false;
-          console.log(
-            `[VideoPlayer] fullscreenChange event:`,
-            { fullscreen, prevIsFullscreen: isFullscreen, prevShowControlsOverlay: showControlsOverlay }
-          );
-          setIsFullscreen(fullscreen);
-
-          // Log sau khi set state (do setState bất đồng bộ, log giá trị cũ và mới)
-          if (!fullscreen) {
-            setShowControlsOverlay(true);
-            console.log(
-              `[VideoPlayer] Exited fullscreen, showControlsOverlay set to true`,
-              { isFullscreen: fullscreen, showControlsOverlay: true }
-            );
-          } else {
-            console.log(
-              `[VideoPlayer] Entered fullscreen`,
-              { isFullscreen: fullscreen, showControlsOverlay }
-            );
-          }
-        },
-      );
-    } catch (e) {
-      // Event may not be supported; ignore gracefully
-    }
-
     // Add interval to track current time progress only
     // ✅ Removed fullscreen polling - now using onFullscreenExit event
     const progressInterval = setInterval(() => {
@@ -158,9 +121,6 @@ export function VideoPlayer({
       playingSubscription.remove();
       mutedSubscription.remove();
       statusSubscription.remove();
-      if (fsSubscription) {
-        fsSubscription.remove();
-      }
     };
   }, [player, onError, isLoading, duration]);
 

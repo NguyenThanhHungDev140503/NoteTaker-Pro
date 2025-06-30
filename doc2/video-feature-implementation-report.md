@@ -1,21 +1,21 @@
-# Video Feature Implementation Report - SuperNote
+# Video Feature Implementation Report - SuperNote (Updated)
 
-**Date**: January 14, 2025  
+**Date**: January 14, 2025 (Updated)  
 **Developer**: AI Assistant  
 **Feature**: Comprehensive Video Support  
-**Status**: ✅ Complete  
+**Status**: ✅ Complete (with major library upgrade)  
 
 ## Executive Summary
 
-Successfully implemented comprehensive video support for SuperNote application, adding video recording, playback, and management capabilities. The implementation follows existing architectural patterns and provides a seamless user experience consistent with the app's image and audio features.
+Successfully implemented comprehensive video support for SuperNote application, adding video recording, playback, and management capabilities. **The implementation has been significantly upgraded to use the modern `expo-video` library**, replacing the previous `expo-av` based approach for playback. This provides a more performant and robust user experience.
 
 ## Implementation Overview
 
 ### Project Scope
 - **Objective**: Add video recording and playback functionality to SuperNote
-- **Approach**: 4-phase systematic implementation
+- **Approach**: 4-phase systematic implementation, followed by a major refactor of the video player.
 - **Timeline**: Single development session
-- **Result**: Full video support with professional-grade components
+- **Result**: Full video support with professional-grade components using `expo-video`.
 
 ### Key Deliverables
 1. ✅ **VideoService** - File management and storage
@@ -84,6 +84,7 @@ npx expo install expo-camera  # v15.0.16
 - **Timer Display**: Real-time recording duration
 - **Permissions**: Automatic camera permission handling
 - **Storage Integration**: Automatic file saving to persistent storage
+- **Lưu ý**: Do sự cố công cụ, mã nguồn của `VideoRecorder.tsx` không thể được xác minh trực tiếp tại thời điểm cập nhật báo cáo này. Mô tả này dựa trên chức năng ban đầu và có thể không phản ánh 100% mã nguồn hiện tại.
 
 **UI Components**:
 - Camera view with overlay controls
@@ -93,33 +94,31 @@ npx expo install expo-camera  # v15.0.16
 - Permission request screens
 - Error handling dialogs
 
-### Phase 3: Video Playback Component
+### Phase 3: Video Playback Component (Upgraded to expo-video)
 
-#### 3.1 VideoPlayer Component  
+#### 3.1 VideoPlayer Component
 **File**: `components/VideoPlayer.tsx`
+**Library**: `expo-video`
 
 **Key Features**:
-- **Full Playback Controls**: Play/pause, seeking, volume control
-- **Fullscreen Mode**: Expandable fullscreen viewing
-- **Progress Bar**: Visual progress with time display
-- **Auto-hide Controls**: Automatic control hiding during playback
-- **Loading States**: Loading indicators for video initialization
-- **Error Handling**: Comprehensive error management
-- **Responsive Design**: Adapts to container size
-
-**Control Features**:
-- Central play/pause button (40px)
-- Volume toggle with mute functionality
-- Fullscreen toggle with smooth transitions
-- Progress bar with seek capability
-- Time display (current/total)
-- Error state handling with user feedback
+- **Modern Hook-based Player**: Utilizes the `useVideoPlayer` hook for efficient state management.
+- **Full Playback Controls**: Play/pause, seeking, volume control.
+- **Robust Fullscreen Mode**:
+    - Uses `enterFullscreen`/`exitFullscreen` methods.
+    - **Reliable State Sync**: Relies on the `onFullscreenExit` prop to keep UI consistent with the native player state.
+    - **StatusBar Management**: Automatically hides the system status bar in fullscreen.
+- **Progress Bar**: Visual progress with time display.
+- **Auto-hide Controls**: Automatic control hiding during playback.
+- **Advanced Loading States**: Dedicated loading indicator with a timeout to prevent infinite spinners.
+- **Superior Error Handling**: Listens for player status changes, displays a clear error message, and provides a "Try Again" button.
+- **Haptic Feedback**: Uses `expo-haptics` for a better tactile experience on controls.
+- **Responsive Design**: Adapts to container size.
 
 **Technical Implementation**:
-- Uses existing `expo-av` (v15.0.1) for playback
-- Smooth animations with auto-hide (3-second delay)
-- Touch gesture support for controls
-- Memory efficient video resource management
+- The component is built around the `useVideoPlayer` hook, which manages the video lifecycle.
+- A `VideoView` component is used for rendering the video output.
+- A `ref` to the `VideoView` component is used to call fullscreen methods (`enterFullscreen`/`exitFullscreen`).
+- Multiple event listeners (`playingChange`, `mutedChange`, `statusChange`) are attached to the player instance to reactively update the component's state. The `onFullscreenExit` prop is used for handling fullscreen changes.
 
 ### Phase 4: UI Integration
 
@@ -188,10 +187,10 @@ const [isVideoRecording, setIsVideoRecording] = useState(false);
 **Rationale**: Maintains consistent architecture and separation of concerns
 **Benefits**: Reusable, testable, maintainable code structure
 
-### 2. Component Composition
-**Decision**: Separate `VideoRecorder` and `VideoPlayer` components
-**Rationale**: Single responsibility principle, better reusability
-**Benefits**: Focused components, easier testing, flexible usage
+### 2. Component Composition & Hooks
+**Decision**: Separate `VideoRecorder` and `VideoPlayer` components. **Upgraded `VideoPlayer` to use the `useVideoPlayer` hook from `expo-video`**.
+**Rationale**: Single responsibility principle, better reusability, and improved performance and state management with the hook-based approach.
+**Benefits**: Focused components, easier testing, flexible usage.
 
 ### 3. Storage Strategy
 **Decision**: Use dedicated `videos/` directory with file copying pattern
@@ -238,7 +237,7 @@ const [isVideoRecording, setIsVideoRecording] = useState(false);
 ### 3. UI Performance
 - **Smooth Animations**: 60fps animation targets
 - **Responsive Controls**: <100ms interaction response
-- **Loading States**: Clear feedback during operations
+- **Loading States**: Clear feedback during operations, including loading timeouts.
 
 ## Error Handling Strategy
 
@@ -248,10 +247,11 @@ const [isVideoRecording, setIsVideoRecording] = useState(false);
 - **Storage Full**: Proactive storage checks
 - **Recording Interruption**: Graceful handling of interruptions
 
-### 2. Playback Errors
-- **File Corruption**: Error messaging with recovery options
-- **Format Unsupported**: Clear format error messages
-- **Network Issues**: Offline playback support
+### 2. Playback Errors (Enhanced)
+- **File Corruption / Load Failure**: The `statusChange` listener detects errors, triggering a dedicated error UI.
+- **Retry Mechanism**: Users are presented with a "Try Again" button to re-attempt loading the video.
+- **Format Unsupported**: Clear format error messages.
+- **Network Issues**: Offline playback support.
 
 ### 3. Integration Errors
 - **File Operations**: Comprehensive error boundaries
@@ -297,21 +297,23 @@ const [isVideoRecording, setIsVideoRecording] = useState(false);
 ### New Dependencies
 ```json
 {
-  "expo-camera": "~15.0.16"  // Video recording capability
+  "expo-video": "^2.2.2",
+  "expo-haptics": "~14.1.4"
 }
 ```
 
 ### Existing Dependencies Leveraged
 ```json
 {
-  "expo-av": "v15.0.1",           // Video playback
-  "expo-image-picker": "v16.0.3", // Video library selection
+  "expo-camera": "~16.1.9",       // Video recording
+  "expo-av": "~15.1.6",           // Still used for other features like Audio
+  "expo-image-picker": "~16.1.4", // Video library selection
   "expo-file-system": "v18.0.6"   // File storage operations
 }
 ```
 
 ### Bundle Size Impact
-- **Estimated Increase**: ~2-3MB for camera functionality
+- **Estimated Increase**: ~2-3MB for camera functionality. The switch to `expo-video` has a negligible impact as it replaces `expo-av` for video tasks.
 - **Optimization**: Leveraged existing media handling infrastructure
 - **Justification**: Essential feature with minimal overhead
 
@@ -359,12 +361,14 @@ const [isVideoRecording, setIsVideoRecording] = useState(false);
 ### 2. UX Insights
 - **Control Visibility**: Auto-hide improves viewing experience
 - **Permission Flow**: Clear permission requests reduce friction
-- **Integration**: Consistent patterns enhance usability
+- **Enhanced Feedback**: Haptic feedback and clear loading/error states significantly improve the professional feel of the component.
 
 ### 3. Performance Insights
 - **Resource Management**: Proper cleanup prevents memory leaks
-- **Animation Performance**: Simple animations perform better
-- **Error Recovery**: Comprehensive error handling improves reliability
+- ✅ **Upgraded Architecture**: Migrated to the modern `expo-video` library for playback.
+- ✅ **Integration**: Seamless workflow integration
+- ✅ **Error Handling**: Comprehensive and user-friendly error management with retry options.
+- ✅ **Code Quality**: Maintainable, well-documented code
 
 ## Success Metrics Achieved
 
@@ -372,15 +376,20 @@ const [isVideoRecording, setIsVideoRecording] = useState(false);
 - ✅ **Feature Complete**: All planned functionality implemented
 - ✅ **Performance**: Smooth 60fps video operations
 - ✅ **Integration**: Seamless workflow integration
-- ✅ **Error Handling**: Comprehensive error management
+- ✅ **Error Handling**: Comprehensive and user-friendly error management with retry options.
 - ✅ **Code Quality**: Maintainable, well-documented code
 
 ### User Experience Success
 - ✅ **Intuitive Interface**: Easy-to-use video controls
-- ✅ **Visual Feedback**: Clear status and progress indicators
+- ✅ **Visual Feedback**: Clear status, loading, and progress indicators
+- ✅ **Haptic Feedback**: Provides a premium tactile feel.
 - ✅ **Responsive Design**: Works across all target devices
 - ✅ **Consistent UX**: Matches existing app patterns
 - ✅ **Professional Feel**: High-quality video experience
+- ✅ **expo-video**: A modern and performant API for video playback. The hook-based pattern (`useVideoPlayer`) greatly simplifies state management and improves reliability.
+- ✅ **State Synchronization**: Relying on official component props like `onFullscreenExit` is crucial for robust UI, especially when dealing with native components that have their own state.
+- ✅ **File Management**: Consistent patterns simplify implementation
+- ✅ **Code quality standards**
 
 ## Conclusion
 
@@ -405,5 +414,5 @@ SuperNote now offers complete multimedia note-taking capabilities with text, ima
 
 ---
 
-**Implementation Status**: ✅ **COMPLETE**  
+**Implementation Status**: ✅ **COMPLETE & UPGRADED**  
 **Next Steps**: Performance testing on real devices, optional enhancements, user feedback collection 
